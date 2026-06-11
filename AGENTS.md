@@ -158,10 +158,12 @@ filed in `.harness/docs/` and approval from `swiftwebui-architect`.**
   command** (e.g. `swift build --package-path /abs/path` in CI), never
   in prose pointing at a file inside this repo.
 
-### 9. Git workflow — feature branches, no direct commits to `main`
+### 9. Git workflow — feature branches, push as PR, owner merges on GitHub
 
-- **Default branch**: `main` is the integration branch. **No direct commits
-  to `main`** — every change lands through a feature branch + merge.
+- **Default branch**: `main` is the integration branch. **No direct
+  commits to `main`** — every change lands through a feature branch
+  → push to `origin` → GitHub PR → owner reviews and merges on
+  github.com.
 - **Branch naming** (Conventional Commits style, kebab-case scope):
   - `feature/<scope>-<short-desc>` — new user-facing surface (e.g.
     `feature/renderer-initial-graph`, `feature/bridge-js-closure`).
@@ -172,13 +174,31 @@ filed in `.harness/docs/` and approval from `swiftwebui-architect`.**
   - `test/<scope>-<short-desc>` — test-only changes.
 - **Scope** = the module or topic name in lowercase: `renderer`, `bridge`,
   `view`, `modifier`, `state`, `docs`, `ci`, `tooling`, `release`.
-- **Mavis workers** (i.e. tasks dispatched via `mavis team plan`):
-  - Receive a prompt that says "create a branch and work there" and do
-    exactly that. The worker pushes the branch and reports a deliverable
-    (or opens a PR). It does **not** merge to `main`.
-  - The owner (you, via Mavis root) reviews the deliverable and merges.
-- **One branch per concern.** A PR fixing `renderer-null-child` should not
-  also sneak in an unrelated `bridge-js-closure` refactor. Split it.
+- **Mavis workers (hard rule)**: a worker NEVER runs
+  `git checkout main`, NEVER runs `git merge …` into `main`, and
+  NEVER runs `git push origin main`. The worker's job ends at:
+  1. commit on the feature branch,
+  2. `git push -u origin <branch>`,
+  3. report the PR URL (constructed as
+     `https://github.com/<owner>/<repo>/pull/new/<branch>` if the
+     push output didn't include one).
+  Use `scripts/finish-task.sh` (owned by `swiftwebui-tooling`) — it
+  does exactly the three steps above and refuses to run if the
+  caller is on `main`. If a worker somehow finds itself on `main`
+  mid-task, it stops and reports; it does not `git checkout -b`
+  on top of an unrelated main.
+- **Owner (you, via Mavis root)**: opens the PR on GitHub, reads the
+  diff, runs the lint / test / smoke checks locally if needed, and
+  merges on github.com. The owner is the **only** entity that
+  moves code into `main`.
+- **No "merge locally to make main point at the new commit"
+  shortcut.** That defeats the entire point of a code-review PR
+  and breaks `git log --first-parent main` as a release audit
+  trail. From this commit forward, every merge into `main` is a
+  GitHub PR merge.
+- **One branch per concern.** A PR fixing `renderer-null-child`
+  should not also sneak in an unrelated `bridge-js-closure`
+  refactor. Split it.
 - See `.harness/docs/release.md` for the merge / release procedure.
 
 ## Team routing
