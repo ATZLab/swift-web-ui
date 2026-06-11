@@ -72,7 +72,20 @@ let package = Package(
     dependencies: [
         // AGENTS.md §5: JavaScriptKit is the only allowed JS-bridge dep.
         // Range chosen for Swift 5.10 (CI) compatibility — see header.
-        .package(url: "https://github.com/swiftwasm/JavaScriptKit", "0.20.0" ..< "1.0.0")
+        .package(url: "https://github.com/swiftwasm/JavaScriptKit", "0.20.0" ..< "1.0.0"),
+        // DocC build plugin. The 0.1.0 close-out introduced
+        // `scripts/verify-docc.sh` as a zero-warning DocC gate wired
+        // into `scripts/finish-task.sh`; that script runs
+        // `swift package generate-documentation`, which is provided
+        // by this plugin. `swift-docc-plugin` itself does not depend
+        // on (and does not interact with) JavaScriptKit or the
+        // Tokamak stack, so it does not relax AGENTS.md §5.
+        //
+        // Range pin: 1.0.0 → <2.0.0 covers 1.x including 1.5.0
+        // (current). `swift-tools-version:5.7` is well under our
+        // 6.2 floor, so the plugin builds on every supported
+        // toolchain.
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.0.0")
     ],
     targets: [
         .target(
