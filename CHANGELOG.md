@@ -1,8 +1,8 @@
 # Changelog
 
 All notable changes to **SwiftWebUI** are recorded here. The format
-follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
-this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+follows **Keep a Changelog** 1.1.0, and this project adheres to
+**Semantic Versioning** 2.0.0.
 
 The entries inside each version are aggregated from the per-day
 record under [`.harness/changelogs/`](./.harness/changelogs/) and are
@@ -56,7 +56,7 @@ The entries below are reproduced verbatim from
 - Renderer: graph (`_Graph`, `_ViewOutputs`), single-pass diff,
   sequential DOM patch. No fine-grained reactivity, no batching.
 - Tooling: `scripts/serve.sh` builds, bundles, and serves the
-  example on `http://localhost:8000`; README has a 5-line quickstart.
+  example locally; README has a 5-line quickstart.
 - DocC catalog stub with `Getting Started` tutorial and the
   `ViewFundamentals` and `Modifiers` articles.
 - OSS tree baseline: `README.md`, `LICENSE` (Apache-2.0),
