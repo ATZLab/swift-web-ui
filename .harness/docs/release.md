@@ -2,6 +2,10 @@
 
 > Owner: `swiftwebui-steward`. Tooling for builds: `swiftwebui-tooling`.
 > Doc publishing: `swiftwebui-docs`.
+>
+> **Roadmap (MVP-first increments, stop conditions, what's not on
+> the map) lives in `ROADMAP.md` at the repo root.** This file is
+> the mechanics; the roadmap is the shape.
 
 ## Versioning policy
 

@@ -137,6 +137,27 @@ filed in `.harness/docs/` and approval from `swiftwebui-architect`.**
 - 0.1.0 = "Hello, web in Swift" (Text + VStack + render to DOM).
 - See `.harness/docs/release.md` for the milestone plan.
 
+### 10. Repository-relative paths only — no absolute filesystem paths in tracked files
+
+- **All paths in tracked docs (`AGENTS.md`, `ROADMAP.md`, `AGENTS_INDEX.md`,
+  `.harness/**/*.md`, etc.) MUST be relative to the repo root.**
+- Use `./foo/bar.md`, `../AGENTS.md`, `Sources/SwiftWebUI/View.swift`,
+  or `docs/<topic>.md`. Never `/Users/...`, never `~/projects/...`,
+  never `C:\...`.
+- **Why**: this is an open-source repo. A clone on a contributor's
+  machine must read identically to a clone on yours. Absolute paths
+  leak the original developer's home directory and break the moment
+  the project moves.
+- **CI guard**: a small pre-commit / pre-merge hook (or, simpler, a
+  `make lint-paths` / `swift run` script owned by `swiftwebui-tooling`)
+  greps for `^/Users/`, `^/home/`, `^C:\\`, `~/` in tracked `.md` and
+  fails the PR. Owner: `swiftwebui-tooling`. Stop condition for the
+  guard: `make lint-paths` returns non-zero on any tracked doc that
+  contains a forbidden path pattern.
+- The only legitimate place for an absolute path is inside a **shell
+  command** (e.g. `swift build --package-path /abs/path` in CI), never
+  in prose pointing at a file inside this repo.
+
 ### 9. Git workflow — feature branches, no direct commits to `main`
 
 - **Default branch**: `main` is the integration branch. **No direct commits
@@ -210,5 +231,8 @@ swift package generate-documentation
 
 - Orchestrator routing: `.harness/AGENTS.md`
 - Locked decisions (deep dive): `.harness/docs/`
+- **Roadmap (MVP-first increments + stop conditions)**: `ROADMAP.md`
+- **Path hygiene guard**: `scripts/lint-paths.sh` — run before any PR.
+  Wires into the `swiftwebui-tooling` CI matrix.
 - Per-day change log: `.harness/changelogs/`
 - Shared team memory: `.harness/memory/MEMORY.md`

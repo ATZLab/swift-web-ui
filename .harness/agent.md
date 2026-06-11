@@ -33,7 +33,7 @@ rules live in `.harness/AGENTS.md` in this directory. Quick map:
 
 ## Hard rules (project locked decisions)
 
-Encoded in `/Users/sungjun.hong/develop/swift-web-ui/AGENTS.md`:
+Encoded in `../AGENTS.md` (project brain at the repo root):
 
 1. **Apple-like Swift naming** — match SwiftUI's exact public types
    and modifier names. No renaming. Use typealiases when in doubt.
@@ -75,5 +75,5 @@ Encoded in `/Users/sungjun.hong/develop/swift-web-ui/AGENTS.md`:
 - `.harness/docs/*.md` — topic files (locked decisions per area).
 - `.harness/reins/<name>/agent.md` — local wrappers for the seven
   global `swiftwebui-*` agents.
-- `/Users/sungjun.hong/develop/swift-web-ui/AGENTS.md` — project
-  brain (the repo's own AGENTS.md, separate from this one).
+- `../AGENTS.md` — project brain (the repo's own AGENTS.md,
+  separate from this one).

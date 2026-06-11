@@ -19,15 +19,15 @@ that live under `~/.mavis/agents/swiftwebui-*/` and are imported
 into this project as local reins under `.harness/reins/`. Routing
 in `.harness/AGENTS.md` references them by `name:`.
 
-| # | Name | Scope (one line) | Stop condition (one line) | Disk path |
+| # | Name | Scope (one line) | Stop condition (one line) | Local rein (repo-relative) |
 |---|------|------------------|---------------------------|-----------|
-| 1 | `swiftwebui-architect` | Public API surface, `_Graph` model, renderer model choice, SPI gating, DocC catalog tree | Public API surface draft is locked in `AGENTS.md` → Locked Decisions; `.docc/` has a `Getting Started.md` topic and a top-level landing page; `Renderer` protocol is declared in source | [`~/.mavis/agents/swiftwebui-architect/agent.md`](https://github.com) · [`.harness/reins/architect/agent.md`](.harness/reins/architect/agent.md) |
-| 2 | `swiftwebui-dom-renderer` | `_Graph` → DOM mapping, diff/patch, list/keyed reconciliation, event delegation, DOM-side state caching | `Text("hi")` mounts to `<div>hi</div>` with a snapshot test that proves it; `swift test` is green on the full matrix; the diff/patch engine has a baseline same-input-renders-twice test | [`~/.mavis/agents/swiftwebui-dom-renderer/agent.md`](https://github.com) · [`.harness/reins/dom-renderer/agent.md`](.harness/reins/dom-renderer/agent.md) |
-| 3 | `swiftwebui-bridge` | JavaScriptKit interop, `JSClosure` retain policy, Swift↔JS value conversion, `await jsPromise(_:)`, external JS binding DSL | At least one of `window.alert` / `console.log` / `fetch` has a safe Swift API; a unit test creates a `Bridge.Owner`, drops it, and asserts the JS closure is released | [`~/.mavis/agents/swiftwebui-bridge/agent.md`](https://github.com) · [`.harness/reins/bridge/agent.md`](.harness/reins/bridge/agent.md) |
-| 4 | `swiftwebui-tooling` | `Package.swift` matrix, JS bundler, dev server, `scripts/serve.sh`, README Quickstart wiring | `./scripts/serve.sh` exists, is executable, builds wasm + bundles JS + serves the example on a clean clone; `swift build` and `swift test` are green on the matrix | [`~/.mavis/agents/swiftwebui-tooling/agent.md`](https://github.com) · [`.harness/reins/tooling/agent.md`](.harness/reins/tooling/agent.md) |
-| 5 | `swiftwebui-docs` | `///` DocC + `## Discussion` + `## Example` on every public symbol, `.docc/` catalog tree, Apple-voice tutorials, GitHub Pages export | `swift package generate-documentation` finishes with zero warnings; a `Getting Started` `Tutorial.tutorial` exists and is referenced from the landing page; Pages deploy is wired in CI | [`~/.mavis/agents/swiftwebui-docs/agent.md`](https://github.com) · [`.harness/reins/docs/agent.md`](.harness/reins/docs/agent.md) |
-| 6 | `swiftwebui-tester` | `swift-testing` skeleton, DOM snapshot harness, Playwright/WebDriver smoke, TDD enforcement, CI matrix | `swift test` green on host with zero failures and zero skipped; a Playwright smoke against the served example passes and is wired in CI; a `Text("hi") → <div>hi</div>` snapshot test exists | [`~/.mavis/agents/swiftwebui-tester/agent.md`](https://github.com) · [`.harness/reins/tester/agent.md`](.harness/reins/tester/agent.md) |
-| 7 | `swiftwebui-steward` | `README`, `LICENSE`, `CONTRIBUTING`, `CoC`, `SECURITY`, PR/Issue templates, SemVer, `CHANGELOG.md`, GitHub Actions (CI + Pages), 0.1.0 release tag | `0.1.0` release notes draft is ready; `.github/workflows/ci.yml` runs the tester matrix and is green on a test PR; Dependabot + Pages deploy are wired | [`~/.mavis/agents/swiftwebui-steward/agent.md`](https://github.com) · [`.harness/reins/steward/agent.md`](.harness/reins/steward/agent.md) |
+| 1 | `swiftwebui-architect` | Public API surface, `_Graph` model, renderer model choice, SPI gating, DocC catalog tree | Public API surface draft is locked in `AGENTS.md` → Locked Decisions; `.docc/` has a `Getting Started.md` topic and a top-level landing page; `Renderer` protocol is declared in source | [`.harness/reins/architect/agent.md`](.harness/reins/architect/agent.md) |
+| 2 | `swiftwebui-dom-renderer` | `_Graph` → DOM mapping, diff/patch, list/keyed reconciliation, event delegation, DOM-side state caching | `Text("hi")` mounts to `<div>hi</div>` with a snapshot test that proves it; `swift test` is green on the full matrix; the diff/patch engine has a baseline same-input-renders-twice test | [`.harness/reins/dom-renderer/agent.md`](.harness/reins/dom-renderer/agent.md) |
+| 3 | `swiftwebui-bridge` | JavaScriptKit interop, `JSClosure` retain policy, Swift↔JS value conversion, `await jsPromise(_:)`, external JS binding DSL | At least one of `window.alert` / `console.log` / `fetch` has a safe Swift API; a unit test creates a `Bridge.Owner`, drops it, and asserts the JS closure is released | [`.harness/reins/bridge/agent.md`](.harness/reins/bridge/agent.md) |
+| 4 | `swiftwebui-tooling` | `Package.swift` matrix, JS bundler, dev server, `scripts/serve.sh`, README Quickstart wiring | `./scripts/serve.sh` exists, is executable, builds wasm + bundles JS + serves the example on a clean clone; `swift build` and `swift test` are green on the matrix | [`.harness/reins/tooling/agent.md`](.harness/reins/tooling/agent.md) |
+| 5 | `swiftwebui-docs` | `///` DocC + `## Discussion` + `## Example` on every public symbol, `.docc/` catalog tree, Apple-voice tutorials, GitHub Pages export | `swift package generate-documentation` finishes with zero warnings; a `Getting Started` `Tutorial.tutorial` exists and is referenced from the landing page; Pages deploy is wired in CI | [`.harness/reins/docs/agent.md`](.harness/reins/docs/agent.md) |
+| 6 | `swiftwebui-tester` | `swift-testing` skeleton, DOM snapshot harness, Playwright/WebDriver smoke, TDD enforcement, CI matrix | `swift test` green on host with zero failures and zero skipped; a Playwright smoke against the served example passes and is wired in CI; a `Text("hi") → <div>hi</div>` snapshot test exists | [`.harness/reins/tester/agent.md`](.harness/reins/tester/agent.md) |
+| 7 | `swiftwebui-steward` | `README`, `LICENSE`, `CONTRIBUTING`, `CoC`, `SECURITY`, PR/Issue templates, SemVer, `CHANGELOG.md`, GitHub Actions (CI + Pages), 0.1.0 release tag | `0.1.0` release notes draft is ready; `.github/workflows/ci.yml` runs the tester matrix and is green on a test PR; Dependabot + Pages deploy are wired | [`.harness/reins/steward/agent.md`](.harness/reins/steward/agent.md) |
 
 > **Note on disk paths.** The first link in the *Disk path* column
 > is the **global** Mavis agent (`~/.mavis/agents/<name>/agent.md`).
@@ -180,3 +180,14 @@ the test suite proves it, the docs explain how to run it, and the
 repo is shaped for the 0.2.0 work (state, binding, environment,
 and the first real layout modifiers) to land without further
 scaffolding.
+
+> **The full roadmap (MVP-first, stop conditions per minor, what's
+> intentionally NOT on the map) lives in `ROADMAP.md` at the repo
+> root.** This plan = the first stop conditions of v0.1.0.
+
+## D. Path hygiene
+
+Tracked docs MUST use repo-relative paths only. The guard is
+`scripts/lint-paths.sh` (owned by `swiftwebui-tooling`) and runs
+as part of the local pre-PR sweep and the CI matrix. See
+`AGENTS.md` §10 for the rule.
