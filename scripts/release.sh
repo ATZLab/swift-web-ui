@@ -232,6 +232,13 @@ if [[ ! -f "$changelog_file" ]]; then
   printf '# %s — changelog\n\n' "$today" > "$changelog_file"
 fi
 
+# Defensive: ensure the file ends with a newline before appending,
+# so the new entry is on its own line regardless of how a prior
+# author left the file.
+if [[ -s "$changelog_file" ]] && [[ "$(tail -c 1 "$changelog_file" | wc -l)" -eq 0 ]]; then
+  printf '\n' >> "$changelog_file"
+fi
+
 printf -- '- %s\n' "$entry" >> "$changelog_file"
 
 cat <<EOF
