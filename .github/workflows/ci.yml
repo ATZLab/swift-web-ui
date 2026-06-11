@@ -51,15 +51,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Single source of truth for the Swift version this matrix runs.
-  # Bump in lockstep with Package.swift's `swift-tools-version`
-  # (currently `6.0`) and with the JavaScriptKit pin (currently
-  # `exact: "0.54.1"`). See AGENTS.md §1 + the JavaScriptKit 0.x
-  # memory entry for the bump checklist.
   SWIFT_VERSION: "6.0"
-  # Path under download.swift.org for the official .pkg installer.
-  # Substituted into the URL below.
-  SWIFT_PKG_BASENAME: "swift-6.0-RELEASE-osx.pkg"
 
 jobs:
   host:
@@ -76,40 +68,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Swift ${{ env.SWIFT_VERSION }} (direct .pkg)
-        # We bypass `swift-actions/setup-swift` on purpose:
-        #   - @v2 tops out at Swift 5.10.
-        #   - @v3 shells out to `swiftly install`, which crashes on
-        #     macos-14 with "freed pointer was not the last
-        #     allocation" and silently leaves the pre-installed
-        #     5.10 toolchain in place.
-        # The official .pkg installer is deterministic and exactly
-        # pins the toolchain we want. ~1.4 GB download; the runner
-        # has 1 Gbps egress and this finishes in ~15 s.
-        run: |
-          set -euxo pipefail
-          SWIFT_PKG_URL="https://download.swift.org/swift-${SWIFT_VERSION}-release/xcode/swift-${SWIFT_VERSION}-RELEASE/${SWIFT_PKG_BASENAME}"
-          curl --fail --silent --show-error --location \
-            -o /tmp/swift.pkg "${SWIFT_PKG_URL}"
-          sudo installer -pkg /tmp/swift.pkg -target /
-          # The .pkg installs to /usr/share/swift/usr/bin; put it on
-          # PATH for subsequent steps. $GITHUB_PATH is the Actions
-          # way to persist an env tweak across steps in the same job.
-          echo "/usr/share/swift/usr/bin" >> "$GITHUB_PATH"
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2.3.0
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
 
       - name: Cache SwiftPM build artifacts
         # Best-effort cache keyed on the resolved package set +
         # the SWIFT_VERSION env. Dependency bumps and toolchain
         # bumps invalidate.
         uses: actions/cache@v4
-        with:
-          path: |
-            .build
-            ~/Library/Caches/org.swift.swiftpm
-            ~/Library/org.swift.swiftpm
-          key: ${{ runner.os }}-spm-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-${{ env.SWIFT_VERSION }}-
 
       - name: Show toolchain
         # Hardened: set -euxo pipefail so a future silent step
