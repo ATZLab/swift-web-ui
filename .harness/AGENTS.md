@@ -86,6 +86,10 @@ that:
 - Daily changelog: every meaningful commit lands an entry in
   `.harness/changelogs/YYYY-MM-DD.md` in the format
   `HH:MM <rein> — <one-line summary>`.
+- **Paths in tracked docs are repository-relative only.** No
+  `/Users/…`, no `~/…`, no Windows drive roots. See repo-root
+  `AGENTS.md` §10 for the full rule and the `lint-paths` guard
+  (owned by `swiftwebui-tooling`).
 
 ## When the orchestrator handles directly (does NOT delegate)
 
@@ -149,3 +153,8 @@ that:
   authored by the `create-7-agents` track. The local reins are
   project-side wrappers, not the canonical definition.
 - Changing Mavis itself — that's the `mavis` agent.
+
+## Local tooling pointers
+
+- `scripts/lint-paths.sh` — path-hygiene guard. Run before any PR.
+  Owner: `swiftwebui-tooling`. See repo-root `AGENTS.md` §10.

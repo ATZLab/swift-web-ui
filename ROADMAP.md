@@ -122,6 +122,8 @@ behavior is the very first thing 0.2.0 unlocks.
 - [ ] README, CONTRIBUTING, CoC, LICENSE exist.
 - [ ] `CHANGELOG.md` and `ReleaseNotes.md` (0.1.0) exist.
 - [ ] All public surface symbols have a DocC comment and a test.
+- [ ] `scripts/lint-paths.sh` (path-hygiene guard) is wired into CI
+      and is green — see `AGENTS.md` §10.
 
 ---
 
