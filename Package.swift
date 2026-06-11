@@ -80,6 +80,16 @@ let package = Package(
             dependencies: [
                 "SwiftWebUI"
             ]
+        ),
+        // Renderer-owned test target. Hosts the snapshot tests for
+        // the v0.1.0 minimal slice (Text → <div>...</div>). The
+        // dom-renderer rein owns the test files; tester reviews.
+        // See `.harness/docs/tdd.md` and `ROADMAP.md` v0.1.0.
+        .testTarget(
+            name: "SwiftWebUIRendererTests",
+            dependencies: [
+                "SwiftWebUIRenderer"
+            ]
         )
     ]
 )
