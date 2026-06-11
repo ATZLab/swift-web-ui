@@ -73,7 +73,6 @@ public struct Environment<Value>: DynamicProperty {
     /// pre-renderer build path) the lookup falls back to a
     /// fresh empty bag, which returns each key's
     /// `defaultValue`.
-    @inlinable
     public var wrappedValue: Value {
         // TODO(0.1.0): re-render wiring — see swiftwebui-dom-renderer C2.
         // 0.1.0 behaviour: thread-local lookup, falling back
@@ -106,7 +105,7 @@ public enum _EnvironmentAccessor {
     /// schedules re-renders on a worker will replace the
     /// slot with a `Synchronization.Mutex` or equivalent.
     @_spi(SwiftWebUI)
-    public static var current: EnvironmentValues?
+    public nonisolated(unsafe) static var current: EnvironmentValues?
 
     /// Installs `bag` for the duration of `body`, restoring
     /// the previous value on exit. The renderer calls this
