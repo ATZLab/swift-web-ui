@@ -1,40 +1,44 @@
-# View fundamentals
+# State and environment fundamentals
 
-> Status: stub. The full article expands when the 0.1.0 surface
-> lands in `Sources/SwiftWebUI/`.
+> Status: stub. The full State and Environment article expands
+> when the renderer installs an `EnvironmentValues` bag and
+> the `View` / `body` requirement lands in 0.2.0. The 0.1.0
+> surface is the property-wrapper family documented in
+> `.harness/docs/swift-ui-surface.md` §4–§5.
 
 ## Overview
 
-Every SwiftWebUI screen is a `View`. A `View` describes a node in
-the rendered DOM tree; the runtime evaluates the view's `body`
-on each pass and the renderer patches the DOM to match.
+The 0.1.0 SwiftWebUI surface ships the property-wrapper
+family that a SwiftUI-style view tree is composed from.
+Three property wrappers (``State``, ``Binding``,
+``Environment``) share a common protocol —
+``DynamicProperty`` — that the framework uses to give each
+wrapper a chance to re-resolve its dependencies before a
+re-render. The leaf views, containers, and modifiers that
+surround them land in 0.2.0; this article documents the
+shape that ships today.
 
-`body` is annotated with `@ViewBuilder`, a result builder that
-turns a block of declarations into a single returned value. The
-`some View` opaque return type keeps the implementation hidden
-while preserving identity across renders, which the diff relies on
-to avoid re-creating DOM nodes.
-
-A screen typically composes existing views rather than subclassing
-them: a `VStack` of a `Text` and an `Image` is a new view, not a
-new type. Composition is the primary extension point; subclassing
-is not used.
+The full sequence is in `ROADMAP.md`.
 
 ## Topics
 
-- ``View`` — the protocol every UI node conforms to.
-- ``ViewBuilder`` — the result builder that fuses a block of
-  declarations into a single `body` value.
-- ``View/body`` — the `@ViewBuilder` property that describes a
-  view's content.
-- ``EmptyView`` — a view that renders nothing.
-- ``AnyView`` — a type-erased view, used as an escape hatch when
-  a single concrete return type is impractical.
+### Property wrappers
+
+- ``State``
+- ``Binding``
+- ``Environment``
+
+### Environment
+
+- ``EnvironmentValues``
+- ``EnvironmentKey``
+
+### Pre-render hook
+
+- ``DynamicProperty``
 
 ## See also
 
-- <doc:GettingStarted> — the end-to-end walkthrough.
-- <doc:Modifiers> — chaining modifiers and the 0.1.0 modifier
-  set.
-- `.harness/docs/swift-ui-surface.md` — the per-symbol spec
-  owned by the architect.
+The full per-symbol spec of the 0.1.0 surface lives in
+`.harness/docs/swift-ui-surface.md`. The end-to-end State
+and Environment walkthrough is in <doc:GettingStarted>.
