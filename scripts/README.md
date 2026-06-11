@@ -8,6 +8,8 @@ none of them require sudo.
 | `serve.sh` | One-shot dev workflow: host build + test, best-effort wasm32 build, serve `web/` on `http://localhost:8000`. | A contributor, manually. |
 | `lint-paths.sh` | Path-hygiene guard. Fails if any tracked Markdown contains an absolute filesystem path. Run before any PR. | CI (`ci.yml`), and manually as a pre-PR sweep. |
 | `finish-task.sh` | Worker finish protocol. Commits on the current feature branch, pushes to `origin`, prints the PR URL. Refuses to run on `main`. | Every Mavis worker, at end of task. |
+| `open-pr.sh` | Train-PR opener. Verifies the branch is pushed, builds a PR body from commit subjects + the project's `PULL_REQUEST_TEMPLATE.md`, and calls `gh pr create`. Refuses to run on `main` or on a non-pushed branch. | The last worker (or the owner) at the end of a phase, exactly once per phase. |
+| `release.sh` | Non-destructive release pre-flight. Refuses to run on `main`; best-effort `gh pr checks`; **prints** the `git tag -s` + `git push` commands the owner will run by hand; appends a one-line "tagged" entry to `.harness/changelogs/<today>.md` (does NOT commit it). | The release owner, after the close-out PR is merged to `main`. |
 
 ## Order of operations for a fresh clone
 
