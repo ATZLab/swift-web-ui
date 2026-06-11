@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.2
 //
 // Package.swift — swift-web-ui
 //
@@ -7,22 +7,40 @@
 //   - Products: SwiftWebUI, SwiftWebUIRenderer, SwiftWebUIBridge, SwiftWebUITooling
 //   - JavaScriptKit is the only allowed JS-bridge dependency (AGENTS.md §5).
 //
+// swift-tools-version rationale:
+//   The manifest must declare a tools-version that meets or exceeds
+//   the maximum of every dependency's own tools-version. JavaScriptKit
+//   0.54.1 (our current pin) declares `swift-tools-version:6.2`, so
+//   6.2 is the floor. We do not jump to 6.3 yet because no released
+//   dependency requires it; 6.2 keeps the manifest portable across
+//   Swift 6.2, 6.3, and 6.4 toolchains. The *compiler* version used
+//   to build the package is set separately by the build toolchain
+//   (Xcode 26.4.1 = Swift 6.3.1 in CI; see
+//   `.github/workflows/ci.yml`) and is independent of this number.
+//
 // Build matrix (this iteration):
-//   - Host triple (macOS): `swift build` / `swift test` — runs unit tests
-//     and is the CI matrix for now.
+//   - Host triple (macOS): `xcodebuild` against the
+//     `swift-web-ui-Package` SwiftPM scheme, on `macos-26` with
+//     Xcode 26.4.1 (default). The CI workflow
+//     (`.github/workflows/ci.yml`) is pinned to this toolchain so
+//     that `xcodebuild build-for-testing` and `xcodebuild
+//     test-without-building` exercise the same Swift compiler
+//     (6.3.1) that downstream consumers will see.
 //   - WebAssembly: `swift build --triple wasm32-unknown-wasi` — optional
 //     in CI, included in the local dev workflow (`scripts/serve.sh`).
 //     wasm32 is not a SwiftPM platform; it is a triple. JavaScriptKit
 //     gates wasi-specific code via `.unsafeFlags(...).when(platforms: [.wasi])`
 //     and links the appropriate C runtime for the target triple.
 //
-// JavaScriptKit version range (locked by CI Swift 5.10):
-//   The CI toolchain is pinned to Swift 5.10 (see
-//   `.github/workflows/ci.yml`). JavaScriptKit `0.23.0+` requires
-//   `swift-tools-version:6.0` and would not build on 5.10. The
-//   `[0.20.0, 0.23.0)` range is the most recent set that compiles on
-//   Swift 5.10. Bumping JavaScriptKit beyond 0.23 requires bumping
-//   the CI toolchain in the same change.
+// JavaScriptKit version range (locked by CI Swift 6.3.1):
+//   The CI toolchain is pinned to Swift 6.3.1 via `macos-26` + Xcode
+//   26.4.1 (see `.github/workflows/ci.yml`). JavaScriptKit
+//   `0.23.0+` requires `swift-tools-version:6.0` and the 0.50+
+//   line (including 0.54.1, our current pin) further requires
+//   `swift-tools-version:6.2`. The `[0.20.0, 1.0.0)` range is the
+//   right open upper bound for a Swift 6.2+ project. Bumping
+//   JavaScriptKit beyond 0.54.x is allowed in the same change as
+//   the tools-version bump that the new release requires.
 //
 // Owner: swiftwebui-tooling.
 

@@ -2,25 +2,35 @@
 #
 # SwiftWebUI CI matrix. Runs on every PR and on every push to `main`.
 #
-# Owned in this iteration by swiftwebui-tooling. The
-# swiftwebui-steward rein takes over the workflow's placement
-# (OSS-level ownership of the `.github/` tree) in the next
-# integration pass; the workflow body itself remains a
-# tooling/tester concern.
+# Owned by swiftwebui-tooling. The swiftwebui-steward rein takes over
+# the workflow's placement (OSS-level ownership of the `.github/`
+# tree) in a future integration pass; the workflow body itself
+# remains a tooling concern.
 #
 # Stop condition (per AGENTS.md tooling scope): the workflow exists,
-# the path-hygiene guard is wired in, `swift build` and `swift test`
-# pass on the host triple, and the job is green on a test PR.
+# the path-hygiene guard is wired in, `xcodebuild build-for-testing`
+# and `xcodebuild test-without-building` pass on the host triple, and
+# the job is green on a test PR.
 #
-# This iteration deliberately runs on `macos-14` only:
-#   - JavaScriptKit builds cleanly on macOS.
-#   - Ubuntu's `swift-actions/setup-swift@v2` does not include the
-#     wasm32 SDK out of the box. Linux comes when JavaScriptKit's
-#     wasm32 SDK is reliably available on `ubuntu-latest` (Phase
-#     0.5+ when the renderer/bridge deliverable lands).
-#   - A wasm32 build step is added in the same change that adds
-#     the renderer/bridge deliverable; doing it now would just
-#     produce a workflow that always fails on every PR.
+# This iteration runs on `macos-26` (Xcode 26.4.1 = default, Swift
+# 6.3.1) and uses `xcodebuild` against the SwiftPM-generated scheme
+# `swift-web-ui`. Why xcodebuild, not swift-actions/setup-swift:
+#   - `swift-actions/setup-swift@v3` shells out to `swiftly install`,
+#     which on the older `macos-14` runner silently crashes (the
+#     step is reported green but the toolchain on disk is unchanged).
+#     See the agent's MEMORY.md entry `swift-actions/setup-swift@v3
+#     crashes on macos-14 runners`.
+#   - Xcode 26.4.1 ships Swift 6.3.1, which is the version we want
+#     anyway (matches the version that ships JavaScriptKit 0.54.1
+#     and `swift-tools-version:6.0`).
+#   - `xcodebuild` against a SwiftPM package produces a deterministic
+#     `swift-web-ui` scheme with no `.xcworkspace` required; the
+#     derived-data cache key covers Package.swift + Sources/ + Tests/
+#     for incremental re-runs.
+#
+# Ubuntu is intentionally not in the matrix yet: JavaScriptKit's
+# wasm32 SDK is not preinstalled on `ubuntu-latest` and is wired up
+# in a later phase (the renderer/bridge deliverable lands first).
 
 name: ci
 
@@ -36,23 +46,45 @@ concurrency:
 
 jobs:
   host:
-    name: host (macos-14, Swift 5.10)
-    runs-on: macos-14
-    timeout-minutes: 30
+    name: host (macos-26, Xcode 26.4.1 / Swift 6.3.1)
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+      DERIVED_DATA: ${{ github.workspace }}/.build/derived-data
+      SCHEME: swift-web-ui-Package
+      DESTINATION: platform=macOS
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Swift 5.10
-        uses: swift-actions/setup-swift@v3
-        with:
-          swift-version: "5.10"
-
-      - name: Show toolchain
+      - name: Select Xcode 26.4.1
         run: |
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          xcodebuild -version
           swift --version
-          xcode-select -p
+
+      - name: Set IgnoreFileSystemDeviceInodeChanges flag
+        # Speeds up incremental builds by letting Xcode skip inode
+        # comparisons on the runner's APFS volume. Same flag TCA sets.
+        run: defaults write com.apple.dt.XCBuild IgnoreFileSystemDeviceInodeChanges -bool YES
+
+      - name: Update mtime for incremental builds
+        # Many SPM build artifacts key off mtime rather than inode;
+        # restoring mtime from git timestamps avoids spurious rebuilds
+        # when the runner's checkout is fresh.
+        uses: chetan/git-restore-mtime-action@v2
+
+      - name: Cache derived data
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}
+          key: |
+            deriveddata-xcodebuild-${{ env.SCHEME }}-${{ env.DESTINATION }}-${{ hashFiles('**/Package.swift', '**/Sources/**/*.swift', '**/Tests/**/*.swift') }}
+          restore-keys: |
+            deriveddata-xcodebuild-${{ env.SCHEME }}-${{ env.DESTINATION }}-
 
       - name: Path-hygiene guard
         # AGENTS.md §10: tracked docs must use repo-relative paths
@@ -60,8 +92,29 @@ jobs:
         # Owned by swiftwebui-tooling.
         run: bash scripts/lint-paths.sh
 
-      - name: swift build (host)
-        run: swift build
+      - name: xcodebuild build-for-testing
+        # Compile the package + tests into the derived data. The
+        # matching `test-without-building` step runs the suite against
+        # the same artifacts, so a flake in test logic does not
+        # re-trigger the (slow) full build. SPM uses the default
+        # package cache (~/Library/Caches/org.swift.swiftpm), which
+        # is what we want — `-clonedSourcePackagesDirPath` is for
+        # hybrid SPM/Xcode projects and confuses pure-SwiftPM builds.
+        run: |
+          set -euxo pipefail
+          xcodebuild \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -skipMacroValidation \
+            build-for-testing
 
-      - name: swift test (host)
-        run: swift test
+      - name: xcodebuild test-without-building
+        run: |
+          set -euxo pipefail
+          xcodebuild \
+            -scheme "$SCHEME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -skipMacroValidation \
+            test-without-building
