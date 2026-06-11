@@ -210,5 +210,6 @@ swift package generate-documentation
 
 - Orchestrator routing: `.harness/AGENTS.md`
 - Locked decisions (deep dive): `.harness/docs/`
+- **Roadmap (MVP-first increments + stop conditions)**: `ROADMAP.md`
 - Per-day change log: `.harness/changelogs/`
 - Shared team memory: `.harness/memory/MEMORY.md`

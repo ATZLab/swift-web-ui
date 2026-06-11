@@ -180,3 +180,7 @@ the test suite proves it, the docs explain how to run it, and the
 repo is shaped for the 0.2.0 work (state, binding, environment,
 and the first real layout modifiers) to land without further
 scaffolding.
+
+> **The full roadmap (MVP-first, stop conditions per minor, what's
+> intentionally NOT on the map) lives in `ROADMAP.md` at the repo
+> root.** This plan = the first stop conditions of v0.1.0.
