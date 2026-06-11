@@ -137,6 +137,52 @@ filed in `.harness/docs/` and approval from `swiftwebui-architect`.**
 - 0.1.0 = "Hello, web in Swift" (Text + VStack + render to DOM).
 - See `.harness/docs/release.md` for the milestone plan.
 
+### 11. v0.1.0 public surface is locked in `docs/swift-ui-surface.md`
+
+- The canonical v0.1.0 SwiftUI surface — every public symbol a
+  user can import, with its signature, a DocC `## Discussion`
+  paragraph, the SwiftUI counterpart it mirrors, and a working
+  `## Example` snippet — lives in
+  **`.harness/docs/swift-ui-surface.md`**.
+- That file is the **single source of truth** for what ships in
+  0.1.0. Anything not enumerated there is **not** a 0.1.0 goal.
+  Items the file lists as `@_spi(Experimental)` are SPI, not
+  stable public surface, and MUST NOT be relied on from
+  outside the SwiftWebUI source tree.
+- The 0.1.0 surface is intentionally a **proof of shape**, not a
+  proof of feature. The renderer is graph-based (VDOM-style,
+  see §6); only `@State` is wired to a single, root re-render
+  in 0.1.0. Subtree-scoped, batched re-render, `Button`,
+  `onTapGesture`, gesture-driven state changes, animation,
+  accessibility, and shape primitives all live in later
+  milestones — see `ROADMAP.md` for the per-minor stop
+  conditions.
+- **Any change** — adding, removing, renaming, re-signaturing,
+  or re-scoping (e.g. promoting an SPI symbol to public) — is a
+  **breaking change** to the v0.1.0 contract and requires:
+  1. a written rationale filed in `.harness/docs/architecture/`
+     (or as an inline design note referenced from the spec);
+  2. an update to `.harness/docs/swift-ui-surface.md` that
+     keeps the per-symbol catalog shape (signature, Discussion,
+     Mirrors SwiftUI, Example);
+  3. sign-off from `swiftwebui-architect` in the PR
+     description;
+  4. a TDD red → green commit pair (see §4 and
+     `.harness/docs/tdd.md`).
+  No source change to `Sources/SwiftWebUI/**` lands in `main`
+  without all four.
+- The `swiftwebui-docs` agent consumes this spec to author the
+  `///` DocC comments and the `.docc/` catalog. The
+  `swiftwebui-tester` agent consumes this spec to author the
+  per-symbol test plan and the snapshot baselines. The
+  `swiftwebui-dom-renderer` agent consumes the modifier and
+  container entries to scope the renderer work. None of those
+  agents may diverge from the spec without re-running this
+  locked-decision process.
+- The architect's extension protocol (how to add a new symbol
+  to the spec) is documented in `.harness/docs/swift-ui-surface.md`
+  §12.
+
 ### 10. Repository-relative paths only — no absolute filesystem paths in tracked files
 
 - **All paths in tracked docs (`AGENTS.md`, `ROADMAP.md`, `AGENTS_INDEX.md`,
