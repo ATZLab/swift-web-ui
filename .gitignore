@@ -1,0 +1,91 @@
+# SwiftWebUI — root .gitignore
+# This project is a Swift package, so the Swift / Xcode / SwiftPM rules below cover it.
+# Anything that is platform-tooling state, editor scratch, or local plan artifacts
+# should also be ignored.
+
+# --- Swift / SwiftPM / Xcode ---------------------------------------------
+# Build artifacts
+.build/
+.swiftpm/
+DerivedData/
+.build/
+build/
+
+# Xcode user / workspace state
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/xcshareddata/
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# SwiftPM generated
+Package.resolved
+
+# Swift macro / swift-syntax caches
+.swiftpm/
+.swiftformat
+.swiftlint.yml.bak
+
+# --- Web / JS interop ----------------------------------------------------
+# JavaScriptKit / Tokamak-style artifacts
+node_modules/
+dist/
+out/
+.cache/
+.swc/
+
+# Rollup / esbuild / Vite
+.rollup.cache/
+.vite/
+*.tsbuildinfo
+
+# --- Editors / OS --------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# JetBrains / AppCode
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime / Atom
+*.sublime-project
+*.sublime-workspace
+.atom/
+
+# --- Mavis / Mavis internal artifacts ----------------------------------
+# Plan/decision/board scratchpads live in the user's home, not in the repo,
+# but the engine also writes per-plan trees under .mavis/ in the workspace.
+# Keep those out of source control — they are runtime bookkeeping.
+.mavis/
+
+# OpenCode / Codex / other AI assistant workspace caches
+.opencode/
+.aider*
+.cursor*
+.continue/
+
+# --- Project-specific scratch -------------------------------------------
+# Local scratch notes / TODOs that the user types ad-hoc
+scratch/
+TODO.local.md
+
+# --- SwiftWebUI-specific ------------------------------------------------
+# (add any new ignore patterns here as the project grows)
