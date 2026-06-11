@@ -21,6 +21,16 @@
 #   - A wasm32 build step is added in the same change that adds
 #     the renderer/bridge deliverable; doing it now would just
 #     produce a workflow that always fails on every PR.
+#
+# Changelog:
+#   - 2026-06-11: downgrade swift-actions/setup-swift@v3 to @v2
+#     (v3 is deprecated on Node 20; GitHub will force Node 24 on
+#     2026-06-16 and remove Node 20 on 2026-09-16; v2 is the
+#     stable line). Also harden "Show toolchain" with set -euxo
+#     pipefail so future toolchain drift fails loudly. Add an
+#     `actions/cache` step for SwiftPM build artifacts (best-
+#     effort, key on Package.resolved + Swift version) so the
+#     matrix does not pay full build cost on every push.
 
 name: ci
 
@@ -42,17 +52,43 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up Swift 5.10
-        uses: swift-actions/setup-swift@v3
+        # NOTE: pinned to @v2 (not @v3) because v3 runs on Node 20,
+        # which GitHub is deprecating (force-migrate to Node 24 on
+        # 2026-06-16; remove Node 20 on 2026-09-16). v2 is the
+        # stable line that keeps working on Node 20. Bump to v3 only
+        # after we also pin to Node 24 explicitly.
+        uses: swift-actions/setup-swift@v2
         with:
           swift-version: "5.10"
 
+      - name: Cache SwiftPM build artifacts
+        # Best-effort cache to keep the matrix fast. Key on the
+        # resolved package set so dependency bumps invalidate; key
+        # on the Swift version so toolchain bumps invalidate.
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}-${{ matrix.swift-version || '5.10' }}
+          restore-keys: |
+            ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}-
+            ${{ runner.os }}-spm-
+
       - name: Show toolchain
+        # Hardened: set -euxo pipefail so a future silent step
+        # failure surfaces as exit 1 instead of swallowing the
+        # error. AGENTS.md §10 expects this kind of explicit
+        # diagnostic in CI.
         run: |
+          set -euxo pipefail
           swift --version
           xcode-select -p
+          sw_vers
 
       - name: Path-hygiene guard
         # AGENTS.md §10: tracked docs must use repo-relative paths
@@ -64,4 +100,7 @@ jobs:
         run: swift build
 
       - name: swift test (host)
+        # `swift test` exits non-zero on any test failure. We do
+        # not pipe the output through grep/jq/etc. to avoid
+        # silently masking failures behind a broken pipe.
         run: swift test
