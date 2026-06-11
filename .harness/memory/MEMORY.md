@@ -102,3 +102,113 @@ contaminated `7778686` with 19 files of tooling work on
 top. The owner had to force-push the branch back to
 `c17d854`. The owner-time cost was real; the fix
 (explicit per-path staging before finish) is mechanical.
+
+### Swift 5.10 cannot resolve `import Testing` (2026-06-11, tooling)
+Type: gotcha
+
+Swift 5.10 ships the `XCTest` framework but does NOT include
+the `Testing` module as first-party. `import Testing` therefore
+fails with `error: no such module 'Testing'`. The two fixes
+are either (a) add an explicit `swift-testing` package dependency
+to `Package.swift`, or (b) move the toolchain to Swift 6.0+,
+where `Testing` is part of the standard library and resolves
+without an extra dependency. We chose (b) — see
+`Package.swift`'s `swift-tools-version:6.0` and
+`.github/workflows/ci.yml`'s `swift-version: "6.0"`.
+
+Pairing rule: bumping the toolchain requires a JavaScriptKit
+bump in the same change. JavaScriptKit `0.22.x` and earlier
+pin `swift-tools-version:5.10`; `0.23.0+` is the first line
+that supports Swift 6.0. So Swift 6 ↔ JavaScriptKit 0.23+
+are inseparable. Bumping JavaScriptKit past 0.23 (e.g. to 1.0)
+requires re-verifying the JSValue lifetime contract in
+`.harness/docs/js-bridge.md` — that is a separate concern.
+
+### JavaScriptKit 0.x does not honour SemVer — pin `exact:` and re-verify the JS bridge (2026-06-11, tooling)
+Type: gotcha
+
+As of JavaScriptKit `0.54.1` (released 2026-06-09), the 0.x
+release line does not respect SemVer. Minor bumps (0.23 ->
+0.24 -> ... -> 0.54) have shipped with API breakage around
+`JSValue` constructors, `JSClosure` lifetime hooks, and
+`JSFunction` call sites. `from: "0.23.0"` and other
+range-based constraints are a footgun on this line — the
+next minor release can silently break the build without
+touching our `Package.swift`.
+
+**Rule**: pin `exact: "<version>"` in `Package.swift` (see
+the current `Package.swift`'s `JavaScriptKit` entry). Bumping
+the version requires a deliberate change that:
+  1. Reads the upstream `CHANGELOG` / release notes between
+     the old exact pin and the new one.
+  2. Re-runs the `JSClosure` retain policy checklist in
+     `.harness/docs/js-bridge.md` (the `BridgedClosure` /
+     `JSClosureRegistry` pattern is forward-compatible across
+     0.x but `JSClosure` initializer and lifetime hook
+     signatures are not).
+  3. Runs `swift test` on the host triple and confirms the
+     0.54.1 build resolves (JavaScriptKit ships its own
+     macros; toolchain compatibility is gated by the
+     `swift-tools-version` declared in JavaScriptKit's own
+     `Package.swift`, which 0.54.1 keeps at 6.0).
+  4. Updates the version-policy header comment in
+     `Package.swift` so the next bump inherits the rationale.
+
+The SwiftWebUI project is currently at `exact: "0.54.1"`. The
+next bump target is whatever the upstream ships; do not
+skip the checklist above.
+
+### Local CI was green for the whole Phase 0; GitHub CI was red
+Type: workflow
+
+The 12 workflow runs that backed the Phase 0 PRs (#1..#12) all
+failed at the `swift test` step, but every local `swift build`
++ `swift test` on this box was green. The disconnect was
+environmental (Swift 5.10 + `swift-actions/setup-swift@v2`
++ `import Testing` from the stdlib that 5.10 doesn't ship),
+not source. The lesson: after a CI red, ALWAYS cross-check
+`swift build` and `swift test` on a local checkout of the
+exact branch tip before assuming the source is broken. The
+CI log (especially the failing step's stderr) is the
+authoritative ground truth; do not infer from "all runs
+failed" alone.
+
+This particular failure was fixed by the
+`chore/ci-swift6-and-javascriptkit-0-23` train-PR — see the
+"Swift 5.10 cannot resolve `import Testing`" entry above.
+
+### swift-actions/setup-swift@v3 is broken on macos-14 (2026-06-11, tooling)
+Type: gotcha
+
+The first attempt at the Swift 6 fix used `setup-swift@v3` +
+`swift-version: "6.0"`. The step reported `success` but
+`swift --version` in `Show toolchain` returned Swift 5.10. The
+hidden reason: `@v3` shells out to `swiftly install 6.0`,
+which crashed on the `macos-14` runner with
+`freed pointer was not the last allocation` and exited with
+`null`. The Actions runner treats a crashed child as a green
+step, so the matrix then ran against the pre-installed
+Swift 5.10 and the test step still failed (no Testing
+module).
+
+The final fix in `chore/ci-swift6-and-javascriptkit-0-23`
+abandons `swift-actions/setup-swift` entirely and installs
+Swift 6.0 from the official .pkg on download.swift.org:
+
+```yaml
+- name: Install Swift 6.0 (direct .pkg)
+  run: |
+    set -euxo pipefail
+    curl --fail --silent --show-error --location \
+      -o /tmp/swift.pkg \
+      "https://download.swift.org/swift-6.0-release/xcode/swift-6.0-RELEASE/swift-6.0-RELEASE-osx.pkg"
+    sudo installer -pkg /tmp/swift.pkg -target /
+    echo "/usr/share/swift/usr/bin" >> "$GITHUB_PATH"
+```
+
+This is deterministic, exact-pinned, decoupled from any
+third-party Action, and survives `setup-swift` line changes
+in the future. Future Swift bumps are a one-line change to
+`SWIFT_VERSION` in `ci.yml` and the corresponding URL. Keep
+this as the SwiftWebUI standard until `swift-actions/setup-swift`
+ships a working Swift 6+ on `macos-14`.

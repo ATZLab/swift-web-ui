@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.0
 //
 // Package.swift — swift-web-ui
 //
@@ -16,13 +16,28 @@
 //     gates wasi-specific code via `.unsafeFlags(...).when(platforms: [.wasi])`
 //     and links the appropriate C runtime for the target triple.
 //
-// JavaScriptKit version range (locked by CI Swift 5.10):
-//   The CI toolchain is pinned to Swift 5.10 (see
-//   `.github/workflows/ci.yml`). JavaScriptKit `0.23.0+` requires
-//   `swift-tools-version:6.0` and would not build on 5.10. The
-//   `[0.20.0, 0.23.0)` range is the most recent set that compiles on
-//   Swift 5.10. Bumping JavaScriptKit beyond 0.23 requires bumping
-//   the CI toolchain in the same change.
+// Toolchain / dependency version policy:
+//   - Swift 6.0+ is the supported toolchain (see `.github/workflows/ci.yml`).
+//     The previous Swift 5.10 line failed the test matrix because
+//     `swift-testing` is not a first-party module on 5.10 — `import Testing`
+//     requires either an explicit `swift-testing` package dependency on
+//     5.10, or a Swift 6.0+ toolchain where `Testing` is stdlib. We
+//     chose the latter to avoid dragging a third-party test framework.
+//   - JavaScriptKit is pinned to `exact: "0.54.1"` (released
+//     2026-06-09). The 0.x line does not honour SemVer — every
+//     minor bump is treated as potentially API-breaking (see the
+//     JSClosure lifetime / JSValue constructor drift warnings in
+//     `.harness/docs/js-bridge.md`). The previous pin
+//     `from: "0.23.0"` was the floor for Swift 6.0 compatibility;
+//     we move to exact-pinned at the latest 0.x release and bump
+//     deliberately per change. Bumping the version requires:
+//       (1) re-verify the JSClosure retain policy in
+//           `.harness/docs/js-bridge.md` against the new
+//           `JSClosure` API (the registry / weak-table pattern has
+//           shifted across the 0.x line).
+//       (2) re-run the JSValue construction test in
+//           `Sources/SwiftWebUIBridge/` if/when it lands.
+//       (3) update this comment.
 //
 // Owner: swiftwebui-tooling.
 
@@ -53,8 +68,10 @@ let package = Package(
     ],
     dependencies: [
         // AGENTS.md §5: JavaScriptKit is the only allowed JS-bridge dep.
-        // Range chosen for Swift 5.10 (CI) compatibility — see header.
-        .package(url: "https://github.com/swiftwasm/JavaScriptKit", "0.20.0" ..< "1.0.0")
+        // Pinned to exact 0.54.1 (released 2026-06-09). See the
+        // "Toolchain / dependency version policy" header above for
+        // why we use `exact:` and the bump checklist.
+        .package(url: "https://github.com/swiftwasm/JavaScriptKit", exact: "0.54.1")
     ],
     targets: [
         .target(
