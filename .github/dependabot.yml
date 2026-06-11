@@ -1,0 +1,67 @@
+# Dependabot — SwiftWebUI
+#
+# Weekly schedule. Two ecosystem tracks:
+#   1. github-actions — keep CI / Pages / release workflows current.
+#   2. swift-dependencies — one weekly PR that opens against the
+#      `Package.swift` SwiftPM manifest with all eligible bumps grouped
+#      together.
+#
+# Owner: swiftwebui-steward. Re-runs on schedule; one PR per ecosystem
+# per week.
+
+version: 2
+
+# We do NOT enable the `package-ecosystem: bundler` / `npm` / `cargo`
+# tracks: this repo's only first-party dependency surface is SwiftPM
+# (declared in `Package.swift`) and the GitHub Actions workflows
+# under `.github/workflows/`. The dev server's JS host page is bundled
+# at build time by `swiftwebui-tooling` and is not a runtime npm
+# dependency.
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    # Group all GitHub Actions bumps into a single weekly PR.
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
+    # Open the PRs against the `chore/dependabot-actions` branch by
+    # default; the steward rotates the branch per week.
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "ci"
+      - "area: ci"
+    # Dependabot auto-merge is OFF — the steward reviews each weekly
+    # PR, runs `scripts/lint-paths.sh`, and merges on github.com.
+    # See AGENTS.md §9 for the "owner merges on GitHub" rule.
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "swift"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Seoul"
+    # One PR per week for all swift-package bumps, grouped together.
+    groups:
+      swift-dependencies:
+        patterns:
+          - "*"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "spm"
+      - "area: tooling"
+    # `swiftwebui-bridge` is the only rein allowed to add JS-bridge
+    # dependencies. The PR description must call out any new package
+    # in the dep tree, and the `swiftwebui-architect` sign-off is
+    # required to merge. See `.harness/docs/js-bridge.md`.
+    open-pull-requests-limit: 5
