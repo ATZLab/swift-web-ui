@@ -10,7 +10,7 @@
 // to the renderer, and a write on `@State` causes the next
 // render to reflect the new value.
 //
-// Two tests, both red at the time of this commit:
+// Three tests:
 //
 //   1. `stateMutationIsReflectedInNextRender` — the storage
 //      semantics the `State.swift` setter already provides (a
@@ -26,9 +26,15 @@
 //      detail C2 ships), `@State` calls it from its setter, and
 //      the test asserts the hook fires exactly once per write.
 //
-// Both tests are red on this commit because the renderer does
-// not yet expose the hook and the `State` setter is a TODO
-// placeholder. The green commit wires both.
+//   3. `noMutationTwoRendersAreIdentical` — the
+//      "no patches" baseline that the dom-renderer rein's
+//      "Stop when" rules require. Two consecutive renders of
+//      the same view with no state change must produce
+//      byte-identical graphs.
+//
+// All three are red on the first commit (the renderer does not
+// yet expose the hook and the `State` setter is a TODO
+// placeholder). The green commit wires both.
 //
 // Owner: swiftwebui-dom-renderer (the renderer is the SPI
 // owner of the re-render hook). Architect owns `@State`'s
@@ -37,7 +43,7 @@
 // (`.harness/docs/swift-ui-surface.md` §10).
 
 import Testing
-@testable import SwiftWebUIRenderer
+@_spi(SwiftWebUI) @testable import SwiftWebUIRenderer
 @_spi(SwiftWebUI) @testable import SwiftWebUI
 
 // MARK: - Test stand-in for a SwiftWebUI.View
@@ -124,5 +130,23 @@ struct StateReRenderTests {
         // Tear down: restore the previous (nil) hook so the
         // install does not leak into other tests in the suite.
         _RendererReRenderHook.uninstall()
+    }
+
+    @Test("no mutation — two consecutive renders produce identical graphs")
+    func noMutationTwoRendersAreIdentical() {
+        // This is the "zero patches" baseline the diff/patch
+        // engine's stop condition requires (see the dom-renderer
+        // rein's "Stop when" rules). In 0.1.0 the renderer is
+        // graph-based with no live DOM host, so the equivalent
+        // assertion is: rendering the same view twice with no
+        // state change produces byte-identical DOMNode trees.
+        let state = State<Int>(wrappedValue: 7)
+        let view = StateDisplayView(state: state)
+
+        let first = String(describing: SnapshotRenderer().render(view))
+        let second = String(describing: SnapshotRenderer().render(view))
+
+        #expect(first == "<div>count = 7</div>")
+        #expect(first == second)
     }
 }

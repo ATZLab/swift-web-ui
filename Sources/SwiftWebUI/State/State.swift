@@ -3,15 +3,25 @@
 // SwiftWebUI's `@State` property wrapper. The signature mirrors
 // SwiftUI's `@State` (see `.harness/docs/swift-ui-surface.md` §4).
 //
-// In 0.1.0 the setter is a NO-OP placeholder: it stores the new
-// value in the per-instance storage so subsequent reads return it,
-// but it does NOT trigger a re-render. The "single, root re-render
-// on `@State` mutation" wiring is the dom-renderer rein's job
-// (Phase C2) and will land in the same minor release. Leaving the
-// TODO here so the next worker sees the seam.
+// In 0.1.0 the setter is wired to the renderer's
+// `_RendererReRenderHook` (see
+// `Sources/SwiftWebUIRenderer/RendererReRenderHook.swift`):
+// every write to `wrappedValue` updates the per-instance
+// storage and triggers a single, full re-render of the root
+// view tree. The 0.2.0 work will replace this with a
+// subtree-scoped, batched re-render driven by
+// `DynamicProperty.update()`. The public shape of the
+// wrapper does not change between 0.1.0 and 0.2.0.
 //
-// Owner: swiftwebui-architect. Implementation: stub for 0.1.0 close-out.
+// Owner: swiftwebui-architect (public surface, signature).
+// The re-render seam itself is owned by
+// `swiftwebui-dom-renderer` (Phase C2 of the 0.1.0
+// close-out). The architect retains the surface; the
+// renderer owns the notification path.
 //
+
+@_spi(SwiftWebUI) import SwiftWebUIRenderer
+
 
 /// A value owned by the view.
 ///
@@ -83,18 +93,23 @@ public struct State<Value>: DynamicProperty {
     /// value if nothing has been written yet).
     public var wrappedValue: Value {
         get {
-            // TODO(0.1.0): re-render wiring — see swiftwebui-dom-renderer C2.
-            // 0.1.0 behaviour: read straight from the storage.
             storage.value
         }
         nonmutating set {
-            // TODO(0.1.0): re-render wiring — see swiftwebui-dom-renderer C2.
-            // 0.1.0 behaviour: write the new value into the
-            // storage so the next read in this view body sees it.
-            // The 0.1.0 stop condition is "Hello, web in Swift" and
-            // does not exercise re-render; the full root re-render
-            // lands with C2 in the same minor.
+            // 0.1.0 contract (`.harness/docs/swift-ui-surface.md`
+            // §4): mutating `wrappedValue` updates the backing
+            // storage and **triggers a single, full re-render of
+            // the root view tree** via the renderer's
+            // `_RendererReRenderHook`. The hook calls the closure
+            // the renderer installed at mount time; if no hook is
+            // installed (e.g. a unit test that does not register
+            // a renderer) the trigger is a no-op and the storage
+            // is still updated. The 0.2.0 work replaces the global
+            // hook with a subtree-scoped, batched re-render driven
+            // by `DynamicProperty.update()` — the public shape of
+            // the wrapper does not change.
             storage.value = newValue
+            _RendererReRenderHook.trigger()
         }
     }
 

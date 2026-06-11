@@ -90,7 +90,21 @@ let package = Package(
     targets: [
         .target(
             name: "SwiftWebUI",
-            dependencies: []
+            // The 0.1.0 root re-render wiring (C2) has
+            // `@State.wrappedValue`'s setter invoke the
+            // renderer's `_RendererReRenderHook.trigger()`.
+            // That hook is renderer-internal SPI (see
+            // `Sources/SwiftWebUIRenderer/RendererReRenderHook.swift`,
+            // marked `@_spi(SwiftWebUI)`). The dep is one-way:
+            // `SwiftWebUI` → `SwiftWebUIRenderer`. The renderer
+            // does not import `SwiftWebUI` — its `Renderable`
+            // protocol is owned by the renderer, and the
+            // public `View` / `Text` surface is consumed by
+            // user code (or the snapshot test stand-ins),
+            // not by the renderer itself.
+            dependencies: [
+                "SwiftWebUIRenderer"
+            ]
         ),
         .target(
             name: "SwiftWebUIRenderer",
@@ -122,6 +136,21 @@ let package = Package(
         // `.harness/docs/tdd.md` and `ROADMAP.md` v0.1.0.
         .testTarget(
             name: "SwiftWebUIRendererTests",
+            dependencies: [
+                "SwiftWebUIRenderer",
+                "SwiftWebUI"
+            ]
+        ),
+        // Snapshot-only test target. Per `.harness/docs/tdd.md`
+        // §"Snapshot tests", the dedicated `SwiftWebUISnapshots`
+        // target is where committed-baseline DOM-snapshot
+        // assertions live. The C2 (0.1.0 close-out) re-render
+        // work lands an end-to-end snapshot of a `@State` toggle
+        // here; the unit-level renderable checks remain in
+        // `SwiftWebUIRendererTests` for now and will migrate as
+        // the snapshot discipline matures in 0.2.0.
+        .testTarget(
+            name: "SwiftWebUISnapshots",
             dependencies: [
                 "SwiftWebUIRenderer",
                 "SwiftWebUI"
