@@ -31,8 +31,15 @@ import Testing
 /// behaviour this test exercises — a leaf node carrying a string —
 /// and nothing more. It will be deleted once the real `Text` lands
 /// in `SwiftWebUI` and the test is rewritten against the real type.
-struct RenderableText {
+///
+/// Conforms to the renderer module's `Renderable` protocol: the
+/// stand-in describes itself as `.text(content)`, the renderer
+/// turns that into the `<div>...</div>` snapshot.
+struct RenderableText: Renderable {
     let content: String
+    var _renderableDescription: RenderableDescription {
+        .text(content)
+    }
 }
 
 @Suite("Text(\"hi\") snapshot")
