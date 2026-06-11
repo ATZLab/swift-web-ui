@@ -137,6 +137,29 @@ filed in `.harness/docs/` and approval from `swiftwebui-architect`.**
 - 0.1.0 = "Hello, web in Swift" (Text + VStack + render to DOM).
 - See `.harness/docs/release.md` for the milestone plan.
 
+### 9. Git workflow — feature branches, no direct commits to `main`
+
+- **Default branch**: `main` is the integration branch. **No direct commits
+  to `main`** — every change lands through a feature branch + merge.
+- **Branch naming** (Conventional Commits style, kebab-case scope):
+  - `feature/<scope>-<short-desc>` — new user-facing surface (e.g.
+    `feature/renderer-initial-graph`, `feature/bridge-js-closure`).
+  - `fix/<scope>-<short-desc>` — bug fix (e.g. `fix/renderer-null-child`).
+  - `chore/<scope>-<short-desc>` — non-functional (e.g. `chore/ci-cache`).
+  - `docs/<scope>-<short-desc>` — documentation only.
+  - `refactor/<scope>-<short-desc>` — internal restructuring.
+  - `test/<scope>-<short-desc>` — test-only changes.
+- **Scope** = the module or topic name in lowercase: `renderer`, `bridge`,
+  `view`, `modifier`, `state`, `docs`, `ci`, `tooling`, `release`.
+- **Mavis workers** (i.e. tasks dispatched via `mavis team plan`):
+  - Receive a prompt that says "create a branch and work there" and do
+    exactly that. The worker pushes the branch and reports a deliverable
+    (or opens a PR). It does **not** merge to `main`.
+  - The owner (you, via Mavis root) reviews the deliverable and merges.
+- **One branch per concern.** A PR fixing `renderer-null-child` should not
+  also sneak in an unrelated `bridge-js-closure` refactor. Split it.
+- See `.harness/docs/release.md` for the merge / release procedure.
+
 ## Team routing
 
 The 7 specialist agents for this project live in the **global** Mavis
