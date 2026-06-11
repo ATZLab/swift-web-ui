@@ -58,7 +58,7 @@ private struct StateToggleView: Renderable {
     }
 }
 
-@Suite("@State toggle snapshot (0.1.0 close-out)")
+@Suite("@State toggle snapshot (0.1.0 close-out)", .serialized)
 struct StateToggleSnapshot {
     /// The committed DOM snapshot for the initial render.
     ///

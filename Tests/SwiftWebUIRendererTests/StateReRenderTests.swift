@@ -70,7 +70,7 @@ struct StateDisplayView: Renderable {
 
 // MARK: - Tests
 
-@Suite("@State root re-render (0.1.0)")
+@Suite("@State root re-render (0.1.0)", .serialized)
 struct StateReRenderTests {
     @Test("state mutation is reflected in the next render")
     func stateMutationIsReflectedInNextRender() {
