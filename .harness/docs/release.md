@@ -43,9 +43,13 @@ Owner: `swiftwebui-steward` (policy); `swiftwebui-tooling` (CI matrix).
 - **Scope** = the module or topic in lowercase (`renderer`, `bridge`,
   `view`, `modifier`, `state`, `docs`, `ci`, `tooling`, `release`).
 - **One branch per concern** — don't bundle unrelated changes.
-- **Mavis workers** (dispatched via `mavis team plan`): push the
-  branch, write `deliverable.md` (or open a PR), do **not** merge
-  to `main`. The owner reviews the deliverable and merges.
+- **Mavis workers (hard rule)**: push the branch and report the PR
+  URL. They NEVER run `git merge …` into `main` and NEVER run
+  `git push origin main`. Use `scripts/finish-task.sh` (owned by
+  `swiftwebui-tooling`) to do the commit + push in one shot.
+- **Owner (the human)**: opens the PR on GitHub, reads the diff,
+  and merges on github.com. The owner is the only entity that
+  moves code into `main`. No local `--no-ff` shortcut.
 - The full rationale lives in `AGENTS.md` §9 (Locked Decisions).
 
 ## Release checklist (per minor)

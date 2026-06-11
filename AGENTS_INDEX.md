@@ -191,3 +191,12 @@ Tracked docs MUST use repo-relative paths only. The guard is
 `scripts/lint-paths.sh` (owned by `swiftwebui-tooling`) and runs
 as part of the local pre-PR sweep and the CI matrix. See
 `AGENTS.md` §10 for the rule.
+
+## E. Worker finish protocol
+
+Workers do NOT merge to `main`. They finish a task by running
+`scripts/finish-task.sh "<commit message>"` on the current feature
+branch, which (a) commits, (b) pushes to `origin`, and (c) prints
+the PR URL. The script refuses to run on `main` and refuses to
+push to `main`. The owner opens the PR on github.com and merges.
+See `AGENTS.md` §9 for the full rule.
