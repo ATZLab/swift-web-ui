@@ -54,7 +54,7 @@ let package = Package(
     dependencies: [
         // AGENTS.md §5: JavaScriptKit is the only allowed JS-bridge dep.
         // Range chosen for Swift 5.10 (CI) compatibility — see header.
-        .package(url: "https://github.com/swiftwasm/JavaScriptKit", "0.20.0" ..< "0.23.0")
+        .package(url: "https://github.com/swiftwasm/JavaScriptKit", "0.20.0" ..< "1.0.0")
     ],
     targets: [
         .target(
