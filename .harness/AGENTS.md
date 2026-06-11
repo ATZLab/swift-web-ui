@@ -158,3 +158,10 @@ that:
 
 - `scripts/lint-paths.sh` — path-hygiene guard. Run before any PR.
   Owner: `swiftwebui-tooling`. See repo-root `AGENTS.md` §10.
+- `scripts/finish-task.sh` — worker commit+push helper. Refuses
+  to run on `main`. Owner: `swiftwebui-tooling`. See repo-root
+  `AGENTS.md` §9.
+- `scripts/open-pr.sh` — single PR opener with auto-filled body
+  (per-rein review list + checklist). Refuses to run on `main`.
+  Owner: `swiftwebui-tooling`. See repo-root `AGENTS.md` §11
+  (one PR per phase) and §12 (PR body auto-fill).
