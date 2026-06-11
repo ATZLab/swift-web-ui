@@ -73,12 +73,6 @@ jobs:
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
-      - name: Cache SwiftPM build artifacts
-        # Best-effort cache keyed on the resolved package set +
-        # the SWIFT_VERSION env. Dependency bumps and toolchain
-        # bumps invalidate.
-        uses: actions/cache@v4
-
       - name: Show toolchain
         # Hardened: set -euxo pipefail so a future silent step
         # failure surfaces as exit 1 instead of swallowing the
