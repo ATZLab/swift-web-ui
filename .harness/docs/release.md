@@ -24,6 +24,26 @@ Semantic Versioning (`MAJOR.MINOR.PATCH`), with the caveat that
   stable product, every modifier documented and tested, all
   SwiftUI overlap names match exactly.
 
+## Branch workflow (per change)
+
+Owner: `swiftwebui-steward` (policy); `swiftwebui-tooling` (CI matrix).
+
+- **Default branch**: `main` is integration only. No direct commits.
+- **Branch naming** (kebab-case, Conventional Commits style):
+  - `feature/<scope>-<short-desc>` — new user-facing surface.
+  - `fix/<scope>-<short-desc>` — bug fix.
+  - `chore/<scope>-<short-desc>` — non-functional.
+  - `docs/<scope>-<short-desc>` — docs only.
+  - `refactor/<scope>-<short-desc>` — internal restructuring.
+  - `test/<scope>-<short-desc>` — test-only.
+- **Scope** = the module or topic in lowercase (`renderer`, `bridge`,
+  `view`, `modifier`, `state`, `docs`, `ci`, `tooling`, `release`).
+- **One branch per concern** — don't bundle unrelated changes.
+- **Mavis workers** (dispatched via `mavis team plan`): push the
+  branch, write `deliverable.md` (or open a PR), do **not** merge
+  to `main`. The owner reviews the deliverable and merges.
+- The full rationale lives in `AGENTS.md` §9 (Locked Decisions).
+
 ## Release checklist (per minor)
 
 Owned by the steward, in this order:
