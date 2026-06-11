@@ -1,0 +1,67 @@
+# .github/workflows/ci.yml
+#
+# SwiftWebUI CI matrix. Runs on every PR and on every push to `main`.
+#
+# Owned in this iteration by swiftwebui-tooling. The
+# swiftwebui-steward rein takes over the workflow's placement
+# (OSS-level ownership of the `.github/` tree) in the next
+# integration pass; the workflow body itself remains a
+# tooling/tester concern.
+#
+# Stop condition (per AGENTS.md tooling scope): the workflow exists,
+# the path-hygiene guard is wired in, `swift build` and `swift test`
+# pass on the host triple, and the job is green on a test PR.
+#
+# This iteration deliberately runs on `macos-14` only:
+#   - JavaScriptKit builds cleanly on macOS.
+#   - Ubuntu's `swift-actions/setup-swift@v2` does not include the
+#     wasm32 SDK out of the box. Linux comes when JavaScriptKit's
+#     wasm32 SDK is reliably available on `ubuntu-latest` (Phase
+#     0.5+ when the renderer/bridge deliverable lands).
+#   - A wasm32 build step is added in the same change that adds
+#     the renderer/bridge deliverable; doing it now would just
+#     produce a workflow that always fails on every PR.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host:
+    name: host (macos-14, Swift 5.10)
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Swift 5.10
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.10"
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcode-select -p
+
+      - name: Path-hygiene guard
+        # AGENTS.md §10: tracked docs must use repo-relative paths
+        # only. The guard returns non-zero on any forbidden pattern.
+        # Owned by swiftwebui-tooling.
+        run: bash scripts/lint-paths.sh
+
+      - name: swift build (host)
+        run: swift build
+
+      - name: swift test (host)
+        run: swift test
