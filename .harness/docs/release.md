@@ -50,6 +50,10 @@ Owner: `swiftwebui-steward` (policy); `swiftwebui-tooling` (CI matrix).
 - **Owner (the human)**: opens the PR on GitHub, reads the diff,
   and merges on github.com. The owner is the only entity that
   moves code into `main`. No local `--no-ff` shortcut.
+- **One PR per phase**: see `AGENTS.md` §11 — multiple workers
+  in the same phase share one train branch; the last worker (or
+  the owner) calls `scripts/open-pr.sh` exactly once to open the
+  single PR. PR body is auto-generated — see `AGENTS.md` §12.
 - The full rationale lives in `AGENTS.md` §9 (Locked Decisions).
 
 ## Release checklist (per minor)
