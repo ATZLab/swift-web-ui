@@ -1,11 +1,16 @@
-# SwiftUI surface — v0.1.0 public API
+# SwiftUI surface — v0.2.0 public API
 
 > Owner: `swiftwebui-architect` (gate for any public API change).
 > Test owner: `swiftwebui-tester`.
 > Doc owner: `swiftwebui-docs`.
-> Source of truth: this file is the **canonical v0.1.0 surface**;
-> any symbol not listed here is **not** a 0.1.0 goal. Locked as
+> Source of truth: this file is the **canonical v0.2.0 surface**;
+> any symbol not listed here is **not** a 0.2.0 goal. Locked as
 > `AGENTS.md` §11 — changes require an architect PR.
+>
+> v0.1.0 entries are preserved verbatim where their public shape
+> is unchanged. v0.2.0 deltas are marked **`(v0.2.0)`** in the
+> per-symbol section header and noted in the per-symbol
+> Discussion paragraph.
 
 This document is the per-symbol catalog that `swiftwebui-docs` will
 turn into DocC articles and that the SwiftWebUI maintainers will
@@ -18,11 +23,19 @@ states that there is no SwiftUI equivalent and the symbol is
 SwiftWebUI-only); the **Example** field is a single working
 Swift snippet.
 
-The 0.1.0 surface is the **proof of shape**, not the proof of
-feature. It is what the first `Hello, web in Swift` example
-exercises. Renderer is graph-based (VDOM-style); state changes
-do not yet re-render. That is 0.2.0's job. The full stop
-conditions for 0.1.0 live in `ROADMAP.md` §"v0.1.0".
+The 0.2.0 surface is the **proof of interactivity**, on top of
+the 0.1.0 **proof of shape**. State changes re-render the
+**subtree** that observed the change (not the full root tree,
+as 0.1.0 did). Re-renders are **batched** — one render per
+microtask, not per setter. The microtask primitive is pinned
+to `Task { @MainActor in ... }` on the Swift concurrency
+runtime (see §4 and §8 `_ReRenderScheduler`). `Button`,
+`.onTapGesture`, and `TextField` (single-line) are the
+user-visible interactive primitives; the underlying
+event-delegation path lives in `Sources/SwiftWebUIRenderer/`
+and the `JSClosure` lifetime policy lives in
+`Sources/SwiftWebUIBridge/`. The full stop conditions for
+0.2.0 live in `ROADMAP.md` §"v0.2.0".
 
 ---
 
@@ -52,9 +65,10 @@ Symbols are grouped by role: **Core protocol and combinators**,
 **Leaf views**, **Container views**, **State and binding**,
 **Environment**, **Modifiers**, and **Escape hatches**.
 
-The **SPI in 0.1.0** subsection lists everything that is
-`@_spi(Experimental)` and therefore not part of the stable
-0.1.0 contract.
+The **SPI in 0.2.0** subsection (§8) lists everything that is
+`@_spi(Experimental)` (public-API-in-waiting) and
+`@_spi(SwiftWebUI)` (project-internal) and therefore not part
+of the stable 0.2.0 contract.
 
 ---
 
@@ -592,12 +606,18 @@ VStack {
 ## 4. State and binding
 
 Property wrappers that participate in the graph's re-render
-cycle. In 0.1.0 **only `@State` is wired to a single, root
-re-render**; `@Binding` and `@Environment` are present in the
-type system so that 0.2.0 work can land without breaking
-source, but they do not yet propagate changes. Calling
-`wrappedValue` returns the current value; the setter exists
-but is a no-op for re-render in 0.1.0.
+cycle. **`(v0.2.0)`** In 0.2.0 `@State` and `@Binding` are
+wired to a **subtree-scoped, microtask-batched** re-render:
+every write to `wrappedValue` schedules a `Task { @MainActor
+in ... }` on the Swift concurrency runtime that runs a
+re-render of the **subtree rooted at the view that owns the
+`State`**, and multiple writes inside the same synchronous
+turn collapse into a single microtask-driven commit. The
+microtask primitive is the Swift-on-wasm32 path; the
+`@MainActor` isolation is the SwiftUI parity (see the
+"Mirrors SwiftUI" line in each entry below). The 0.1.0
+contract ("one full re-render of the root view tree per
+setter, driven by `_RendererReRenderHook`") is replaced.
 
 ### `@State`
 
@@ -612,17 +632,24 @@ public struct State<Value>: DynamicProperty {
 
 A value owned by the view. The initial value is captured at
 first render. **`(v0.2.0)`** Mutating `wrappedValue` updates
-the backing storage and schedules a re-render of the
-**subtree rooted at the view that owns the `State`**. Multiple
-writes inside the same synchronous turn collapse into a single
-microtask-driven commit — one re-render per microtask, not per
-setter. The 0.1.0 contract ("one full re-render of the root
-view tree per setter") is replaced.
+the backing storage and schedules a `Task { @MainActor in
+... }` on the Swift concurrency runtime. The task runs a
+re-render of the **subtree rooted at the view that owns the
+`State`** and is deduplicated within a single microtask pass,
+so multiple writes inside the same synchronous turn collapse
+into a single re-render. The `Task` is enqueued via
+`_ReRenderScheduler` (SPI); the actor isolation is the
+contract — the setter may be called from any actor, but the
+resulting re-render always runs on the main actor, matching
+SwiftUI's `@MainActor` isolation. The 0.1.0 contract ("one
+full re-render of the root view tree per setter") is
+replaced.
 
-**Mirrors SwiftUI:** identical shape to SwiftUI's `@State`.
-The "subtree-scoped, batched" re-render is the behaviour
-SwiftUI provides for free because it owns the runtime; in
-SwiftWebUI it is the explicit contract of the
+**Mirrors SwiftUI:** identical shape to SwiftUI's `@State`,
+including the `@MainActor` isolation that SwiftUI enforces on
+its re-render path. The "subtree-scoped, batched" re-render
+is the behaviour SwiftUI provides for free because it owns
+the runtime; in SwiftWebUI it is the explicit contract of the
 `_ReRenderScheduler` (SPI) the setter delegates to.
 
 **Example:**
@@ -649,14 +676,39 @@ public struct Binding<Value>: DynamicProperty {
 }
 ```
 
-A two-way reference to a value owned elsewhere. In 0.1.0 the
-getter / setter functions are stored and called; there is no
-notification back to the renderer on `wrappedValue` change.
+A two-way reference to a value owned elsewhere. **`(v0.2.0)`**
+The getter and setter functions are stored and called; a
+write through the binding forwards to the parent `@State`
+whose setter then schedules a `Task { @MainActor in ... }`
+re-render of the parent subtree. The chain is:
+
+```
+Binding.wrappedValue = v
+  → Binding.setter(v)
+    → State.wrappedValue = v         (parent's storage)
+      → Task { @MainActor in re-render(parent-subtree) }
+```
+
+Multiple binding writes inside the same synchronous turn
+collapse into a single re-render through the same
+microtask-batched path. In 0.1.0 the write reached the
+parent's storage but did not trigger a re-render; that
+behaviour is replaced.
+
 The `Binding.constant(_:)` initialiser produces a non-mutating
 binding, useful for previewing a view that takes a binding
-without owning state.
+without owning state. `Binding.constant` writes are
+**never** a re-render trigger — the captured setter is a
+no-op, so the parent storage is never touched and the
+scheduler is never invoked.
 
-**Mirrors SwiftUI:** identical shape to SwiftUI's `@Binding`.
+**Mirrors SwiftUI:** identical shape to SwiftUI's `@Binding`,
+including the re-render propagation that SwiftUI performs on
+the main actor. SwiftUI's two-way data flow is implicit; in
+SwiftWebUI the propagation is explicit because the `Binding`
+wrapper holds the parent `State` as a strong reference (see
+`Binding.Getter` / `Binding.Setter` in
+`Sources/SwiftWebUI/State/Binding.swift`).
 
 **Example:**
 
@@ -687,14 +739,24 @@ view tree. **`(v0.2.0)`** The lookup is performed at render
 time against a per-key subscription: when an ancestor writes
 a value through the `EnvironmentValues` subscript for a key
 that a descendant reads with `@Environment`, the
-`_ReRenderScheduler` schedules a re-render of the descendants
-that observed the key, in the same microtask-batched shape as
-`@State` and `@Binding`. In 0.1.0 the same write reached the
-bag but did not trigger a re-render; that behaviour is
-replaced.
+`_ReRenderScheduler` schedules a `Task { @MainActor in ... }`
+re-render of all descendants subscribed to that key, in the
+same microtask-batched shape as `@State` and `@Binding`. The
+actor isolation is the same `@MainActor` contract as
+`@State` — the ancestor write may come from any actor, but
+the re-render always runs on the main actor. In 0.1.0 the
+same write reached the bag but did not trigger a re-render;
+that behaviour is replaced.
 
 **Mirrors SwiftUI:** identical shape to SwiftUI's
-`@Environment(_:)`.
+`@Environment(_:)`, including the main-actor re-render that
+SwiftUI performs when a value in the environment changes.
+SwiftUI tracks subscriptions implicitly through its
+dependency graph; in SwiftWebUI the subscription is
+maintained by `_EnvironmentAccessor` (SPI) on a
+per-key granularity (a write to key `\.colorScheme` does not
+trigger a re-render of a descendant that reads only
+`\.locale`).
 
 **Example:** see `Environment` below.
 
@@ -1089,8 +1151,7 @@ a symbol to public requires an architect PR and a test.
 | `ButtonStyle` | Protocol shape is locked for 0.2.0; concrete styles (`.bordered`, `.borderless`, …) are 0.3.0 work. The 0.2.0 renderer uses a `PlainButtonStyle` default. |
 
 `Button` and `TextField` **moved from `@_spi(Experimental)` to
-`public`** in 0.2.0 — see the v0.2.0 changelog at the top of
-this document.
+`public`** in 0.2.0 — see the v0.2.0 intro above.
 
 ### `@_spi(SwiftWebUI)` (project-internal, not for promotion)
 
@@ -1104,7 +1165,7 @@ renderer is free to evolve without breaking source.
 | Symbol | Public contract it implements |
 |---|---|
 | `_RendererReRenderHook` | The 0.1.0 root-tree re-render trigger, retained for the 0.1.0 → 0.2.0 transition. **Deprecated in 0.2.0** — `@State` and `@Binding` setters should call `_ReRenderScheduler.schedule(_:)` instead. The 0.2.0 deletion of this hook is 0.3.0 work. |
-| `_ReRenderScheduler` | The microtask-batched re-render scheduler. `@State` and `@Binding` setters and `EnvironmentValues` writers all go through this. |
+| `_ReRenderScheduler` | The re-render scheduler. **`(v0.2.0)`** The scheduler enqueues a `Task { @MainActor in ... }` on the Swift concurrency runtime; the body of the task performs the re-render of the scheduled subtree. `@State` and `@Binding` setters and `EnvironmentValues` writers all go through this. The `@MainActor` isolation is the contract — the body always runs on the main actor, even if the setter call came from another actor. |
 | `_RenderEventRegistry` | The DOM event listener registry. `Button`, `TextField`, and `.onTapGesture` install their listeners here; the registry owns the `JSClosure` retain policy. |
 | `_GraphIdentity` | The per-view identity tag the renderer uses to decide which subtree a re-render applies to. Stable across the 0.2.0 microtask-batched commits. |
 
@@ -1258,9 +1319,27 @@ acceptance, on top of the five general items above.
   not a sufficient signal).
 - **Batching test** (Tests/SwiftWebUITests/): three
   synchronous writes to the same `State` in the same
-  synchronous turn produce **one** microtask-driven commit,
-  not three. The test installs a `ReRenderObserver` (SPI) on
-  the scheduler and asserts the commit count.
+  synchronous turn produce **one** `Task { @MainActor in
+  ... }` re-render, not three. The test installs a
+  `ReRenderObserver` (SPI) on the scheduler and asserts the
+  commit count.
+- **Microtask timing test**: the `Task { @MainActor in ... }`
+  fires **after** the synchronous turn returns, on the Swift
+  concurrency runtime, not synchronously inside the setter.
+  The test uses a `ReRenderObserver` and asserts the commit
+  timestamp is later than the setter's return.
+- **No-mutation-no-render test** (negative): reading
+  `wrappedValue` without writing does not schedule a
+  re-render. The test installs the `ReRenderObserver`,
+  reads the state, and asserts the commit count stays at
+  zero.
+- **Cross-actor setter test**: a setter call from a
+  non-`@MainActor` context (e.g. a `Task.detached { ... }`
+  or a callback from a non-main-isolated API) is
+  serialised through the `@MainActor` isolation of the
+  resulting re-render task. The test fires a state write
+  from a detached task, awaits the resulting re-render, and
+  asserts the re-render ran on the main actor.
 - **Snapshot test** (Tests/SwiftWebUISnapshots/): a
   `Counter` view at `count = 0` and at `count = 3` produces
   the expected two snapshots; the diff is a single
@@ -1276,24 +1355,37 @@ acceptance, on top of the five general items above.
 - **Through-binding trigger test**: a child view that holds
   `@Binding var count: Int` and writes to it; the parent's
   `@State` storage receives the write, the
-  `_ReRenderScheduler` schedules the parent's subtree, and
-  the parent re-renders. The test uses the same
-  `ReRenderObserver` as the `@State` batching test.
+  `_ReRenderScheduler` schedules a `Task { @MainActor in ... }`
+  re-render of the parent's subtree, and the parent
+  re-renders. The test uses the same `ReRenderObserver` as
+  the `@State` batching test.
+- **Cross-actor binding test**: a binding write from a
+  non-`@MainActor` context is serialised through the
+  `@MainActor` isolation of the resulting re-render task
+  (the same contract as `@State`).
 - **Constant binding is inert**: `Binding.constant(_:)`
   writes do **not** trigger a re-render (the assertion is
-  negative — the commit count stays at zero).
+  negative — the commit count stays at zero; the
+  `ReRenderObserver` is never invoked).
 
 #### `@Environment` (per-key subscription change)
 
 - **Ancestor-write-then-descendant-read test**: a parent
   view sets `\.colorScheme` to `.dark` through the
-  `EnvironmentValues` subscript; a child that reads
+  `EnvironmentValues` subscript; the `_ReRenderScheduler`
+  schedules a `Task { @MainActor in ... }` re-render of all
+  descendants subscribed to that key; a child that reads
   `@Environment(\.colorScheme)` observes the new value on
   the same microtask-batched commit.
 - **Unrelated-key test**: setting `\.colorScheme` on the
   ancestor does **not** cause a re-render of a descendant
   that does not read it (the per-key subscription
-  granularity).
+  granularity). The `ReRenderObserver` confirms no commit
+  is scheduled for the unrelated descendant.
+- **Cross-actor environment test**: a write to the
+  `EnvironmentValues` subscript from a non-`@MainActor`
+  context is serialised through the `@MainActor` isolation
+  of the resulting re-render task.
 
 #### `Button`
 
@@ -1367,11 +1459,20 @@ acceptance, on top of the five general items above.
 #### `_ReRenderScheduler` (SPI)
 
 - **Commit-count test**: synchronous N writes → 1 commit
-  (batching contract).
-- **Microtask timing test**: the commit runs in a
-  microtask, not synchronously. The test uses a
-  `ReRenderObserver` and asserts the commit happens
-  **after** the synchronous turn returns.
+  (batching contract). The 1 commit corresponds to 1
+  `Task { @MainActor in ... }` body run, not N.
+- **Primitive test**: the scheduler enqueues a
+  `Task { @MainActor in ... }` on the Swift concurrency
+  runtime, not a `DispatchQueue.main.async` or a custom
+  microtask queue. The test uses a
+  `MainActor.assumeIsolated { ... }` shim around the body
+  to assert the actor context, and inspects the task's
+  `Task` identity (`@MainActor`).
+- **Microtask timing test**: the `Task { @MainActor in ... }`
+  fires after the synchronous turn returns, on the Swift
+  concurrency runtime, not synchronously inside the
+  setter. The test uses a `ReRenderObserver` and asserts
+  the commit timestamp is later than the setter's return.
 - **Subtree identity test**: a write to a `@State` owned
   by view `A` schedules a commit whose re-render set is
   `{A, A.children}` and not `{root, root.subtree}`.
@@ -1417,6 +1518,42 @@ acceptance, on top of the five general items above.
   `TextField` typing updates the view, `onTapGesture` fires
   on tap, no `JSClosure` regression — are what the team is
   measured against.
+
+### Self-critique status (transparency)
+
+When this ledger was first committed (v0.2.0 phase 1, train
+branch `feature/v0.2.0-interactivity`), the architect
+flagged five self-critique items. Their status as of
+v0.2.0 phase 2 (this commit) is:
+
+- **(1) Microtask primitive not pinned.** **Resolved (owner
+  decision, 2026-06-12).** The microtask is now pinned to
+  `Task { @MainActor in ... }` on the Swift concurrency
+  runtime. Every Discussion paragraph in §4, every relevant
+  row in §8 (`_ReRenderScheduler`), and every acceptance
+  test in §10 uses this exact token. The dom-renderer and
+  bridge workers should implement against this primitive and
+  no other (no `DispatchQueue.main.async`, no custom
+  microtask queue).
+- **(2) `LocalizedStringKey` overloads shipped before
+  runtime localisation.** **Open.** Deferred to the
+  0.2.x/0.3.0 release decision; the spec is unchanged. The
+  owner has not yet decided whether to drop the
+  `LocalizedStringKey` overloads from 0.2.0 or ship them
+  with the existing 0.1.0 runtime fallback.
+- **(3) Multi-tap / long-press deferred to 0.3.0.** **Open.**
+  Awaiting the dom-renderer worker's gesture-recogniser
+  shape (does the renderer want a `count: 1` only contract
+  for 0.2.0, or does it want `count: 2` with a timer?).
+- **(4) `_RendererReRenderHook` deprecation vs. deletion.**
+  **Open.** The 0.2.0 spec marks the hook deprecated
+  (deletion 0.3.0). The owner can promote to deletion in
+  0.2.0 if the dom-renderer is ready to remove the global
+  static on the same commit that adds `_ReRenderScheduler`.
+- **(5) `ButtonStyle` SPI vs. public.** **Open.** The 0.2.0
+  spec keeps the protocol as `@_spi(Experimental)`. The
+  owner can promote to public if the dom-renderer ships a
+  `PlainButtonStyle` default in 0.2.0.
 
 ## 12. How to extend the surface (the architect's protocol)
 
