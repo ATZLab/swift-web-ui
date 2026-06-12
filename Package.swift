@@ -72,12 +72,39 @@ let package = Package(
     dependencies: [
         // AGENTS.md §5: JavaScriptKit is the only allowed JS-bridge dep.
         // Range chosen for Swift 5.10 (CI) compatibility — see header.
-        .package(url: "https://github.com/swiftwasm/JavaScriptKit", "0.20.0" ..< "1.0.0")
+        .package(url: "https://github.com/swiftwasm/JavaScriptKit", "0.20.0" ..< "1.0.0"),
+        // DocC build plugin. The 0.1.0 close-out introduced
+        // `scripts/verify-docc.sh` as a zero-warning DocC gate wired
+        // into `scripts/finish-task.sh`; that script runs
+        // `swift package generate-documentation`, which is provided
+        // by this plugin. `swift-docc-plugin` itself does not depend
+        // on (and does not interact with) JavaScriptKit or the
+        // Tokamak stack, so it does not relax AGENTS.md §5.
+        //
+        // Range pin: 1.0.0 → <2.0.0 covers 1.x including 1.5.0
+        // (current). `swift-tools-version:5.7` is well under our
+        // 6.2 floor, so the plugin builds on every supported
+        // toolchain.
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.0.0")
     ],
     targets: [
         .target(
             name: "SwiftWebUI",
-            dependencies: []
+            // The 0.1.0 root re-render wiring (C2) has
+            // `@State.wrappedValue`'s setter invoke the
+            // renderer's `_RendererReRenderHook.trigger()`.
+            // That hook is renderer-internal SPI (see
+            // `Sources/SwiftWebUIRenderer/RendererReRenderHook.swift`,
+            // marked `@_spi(SwiftWebUI)`). The dep is one-way:
+            // `SwiftWebUI` → `SwiftWebUIRenderer`. The renderer
+            // does not import `SwiftWebUI` — its `Renderable`
+            // protocol is owned by the renderer, and the
+            // public `View` / `Text` surface is consumed by
+            // user code (or the snapshot test stand-ins),
+            // not by the renderer itself.
+            dependencies: [
+                "SwiftWebUIRenderer"
+            ]
         ),
         .target(
             name: "SwiftWebUIRenderer",
@@ -100,13 +127,33 @@ let package = Package(
             ]
         ),
         // Renderer-owned test target. Hosts the snapshot tests for
-        // the v0.1.0 minimal slice (Text → <div>...</div>). The
-        // dom-renderer rein owns the test files; tester reviews.
-        // See `.harness/docs/tdd.md` and `ROADMAP.md` v0.1.0.
+        // the v0.1.0 minimal slice (Text → <div>...</div>) and the
+        // 0.1.0 re-render wiring tests (a SwiftWebUI.View with
+        // `@State` mutates, the renderer re-evaluates). The test
+        // target depends on `SwiftWebUI` so the tests can drive
+        // the architect's real `@State` wrapper. The dom-renderer
+        // rein owns the test files; tester reviews. See
+        // `.harness/docs/tdd.md` and `ROADMAP.md` v0.1.0.
         .testTarget(
             name: "SwiftWebUIRendererTests",
             dependencies: [
-                "SwiftWebUIRenderer"
+                "SwiftWebUIRenderer",
+                "SwiftWebUI"
+            ]
+        ),
+        // Snapshot-only test target. Per `.harness/docs/tdd.md`
+        // §"Snapshot tests", the dedicated `SwiftWebUISnapshots`
+        // target is where committed-baseline DOM-snapshot
+        // assertions live. The C2 (0.1.0 close-out) re-render
+        // work lands an end-to-end snapshot of a `@State` toggle
+        // here; the unit-level renderable checks remain in
+        // `SwiftWebUIRendererTests` for now and will migrate as
+        // the snapshot discipline matures in 0.2.0.
+        .testTarget(
+            name: "SwiftWebUISnapshots",
+            dependencies: [
+                "SwiftWebUIRenderer",
+                "SwiftWebUI"
             ]
         )
     ]
