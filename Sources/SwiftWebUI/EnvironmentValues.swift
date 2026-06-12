@@ -14,6 +14,8 @@
 // Owner: swiftwebui-architect. Implementation: stub for 0.1.0 close-out.
 //
 
+@_spi(SwiftWebUI) import SwiftWebUIRenderer
+
 /// A bag of values keyed by `EnvironmentKey`.
 ///
 /// `EnvironmentValues` is the cross-tree, read-only value bag
@@ -77,20 +79,33 @@ public struct EnvironmentValues {
     /// the same key observe the written value.
     public subscript<Key: EnvironmentKey>(key: Key.Type) -> Key.Value {
         get {
-            // TODO(0.1.0): re-render wiring — see swiftwebui-dom-renderer C2.
-            // 0.1.0 behaviour: an unset key returns its
-            // `defaultValue`. Concrete keys are 0.2.0+.
+            // 0.2.0 contract (`.harness/docs/swift-ui-surface.md`
+            // §4 + §5 + §10): an unset key returns its
+            // `defaultValue`. The 0.1.0 TODO is resolved —
+            // the 0.2.0 work wires the per-key subscription
+            // machinery (see `_ReRenderScheduler`).
             if let v = storage.entries[ObjectIdentifier(key)] as? Key.Value {
                 return v
             }
             return Key.defaultValue
         }
         set {
-            // TODO(0.1.0): re-render wiring — see swiftwebui-dom-renderer C2.
-            // 0.1.0 behaviour: a write stores the value. The
-            // 0.2.0 work will trigger a re-render of any
-            // descendant whose `@Environment` reads this key.
+            // 0.2.0 contract: a write stores the value AND
+            // schedules a `Task { @MainActor in ... }`
+            // re-render via `_ReRenderScheduler.schedule(_:)`.
+            // The identity is keyed on the `EnvironmentKey`
+            // type's `ObjectIdentifier`; the renderer pins
+            // the identity to the descendants that read this
+            // key at mount time. The 0.2.0 simple contract
+            // collapses all writes to a key into a single
+            // commit per microtask turn; per-key subscriber
+            // tracking is the 0.3.0 work (see the
+            // per-key granularity discussion in
+            // `.harness/docs/swift-ui-surface.md` §10).
             storage.entries[ObjectIdentifier(key)] = newValue
+            _ReRenderScheduler.schedule(
+                _GraphIdentity("Environment<\(ObjectIdentifier(key).hashValue)>")
+            )
         }
     }
 }

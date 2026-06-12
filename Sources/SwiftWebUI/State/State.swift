@@ -93,22 +93,37 @@ public struct State<Value>: DynamicProperty {
     /// value if nothing has been written yet).
     public var wrappedValue: Value {
         get {
+            // Reading is a no-op (no schedule). The
+            // 0.2.0 contract is that only writes schedule.
             storage.value
         }
         nonmutating set {
-            // 0.1.0 contract (`.harness/docs/swift-ui-surface.md`
-            // §4): mutating `wrappedValue` updates the backing
-            // storage and **triggers a single, full re-render of
-            // the root view tree** via the renderer's
-            // `_RendererReRenderHook`. The hook calls the closure
-            // the renderer installed at mount time; if no hook is
-            // installed (e.g. a unit test that does not register
-            // a renderer) the trigger is a no-op and the storage
-            // is still updated. The 0.2.0 work replaces the global
-            // hook with a subtree-scoped, batched re-render driven
-            // by `DynamicProperty.update()` — the public shape of
-            // the wrapper does not change.
+            // 0.2.0 contract (`.harness/docs/swift-ui-surface.md`
+            // §4 + §8 + §10): mutating `wrappedValue` writes
+            // the new value to the storage and schedules a
+            // `Task { @MainActor in ... }` re-render via
+            // `_ReRenderScheduler.schedule(_:)`. The
+            // scheduler collapses N synchronous writes in the
+            // same turn into a single commit; the commit
+            // fires on the main actor regardless of the
+            // calling actor.
+            //
+            // The 0.1.0 root-tree re-render is **also**
+            // invoked for the 0.1.0 → 0.2.0 transition
+            // window. The snapshot test target asserts the
+            // hook fires once per write (the 0.1.0 contract);
+            // the renderer test target asserts the scheduler
+            // fires one commit per microtask-batched turn
+            // (the 0.2.0 contract). The hook is
+            // `@available(*, deprecated)` and is removed in
+            // 0.3.0; the 0.2.0 line is the new contract.
             storage.value = newValue
+            _ReRenderScheduler.schedule(
+                _GraphIdentity("State<\(ObjectIdentifier(storage).hashValue)>")
+            )
+            // The deprecated 0.1.0 root-tree hook fires too.
+            // See `RendererReRenderHook.swift` for the
+            // deprecation note.
             _RendererReRenderHook.trigger()
         }
     }
@@ -120,6 +135,22 @@ public struct State<Value>: DynamicProperty {
         // The binding holds a strong reference to the storage,
         // not to the `State` wrapper itself, so the slot survives
         // even if the parent view's `State` is re-instantiated.
-        Binding(get: { self.storage.value }, set: { self.storage.value = $0 })
+        //
+        // The setter goes through `wrappedValue =` (not
+        // `storage.value =`) so the 0.2.0 chain holds:
+        //
+        //   Binding.wrappedValue = v
+        //     → Binding.setter(v)
+        //       → State.wrappedValue = v
+        //         → _ReRenderScheduler.schedule(_:)
+        //
+        // A direct `storage.value = v` write would skip the
+        // scheduler and break the per-key subtree
+        // re-render contract (the 0.2.0 chain tests
+        // assert the scheduler fires on a binding write).
+        Binding(
+            get: { self.storage.value },
+            set: { newValue in self.wrappedValue = newValue }
+        )
     }
 }

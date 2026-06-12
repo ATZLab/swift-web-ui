@@ -90,10 +90,11 @@ struct OnTapGestureSingleTapTests {
     @Test("a synthetic click on a view with .onTapGesture invokes the action once")
     func syntheticClickInvokesTapAction() async {
         let recorder = OnTapCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
         _RenderEventRegistry.resetForTesting()
-        defer { _RenderEventRegistry.resetForTesting() }
+        _RenderEventRegistry.resetForTesting()
 
         // The 0.2.0 contract: a synthetic `click` event
         // on a view with `.onTapGesture` invokes the
@@ -127,10 +128,11 @@ struct OnTapGestureSingleTapTests {
     @Test("a tap that mutates @State triggers a subtree-scoped re-render (re-render pairing)")
     func tapMutatingStateTriggersReRender() async {
         let recorder = OnTapCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
         _RenderEventRegistry.resetForTesting()
-        defer { _RenderEventRegistry.resetForTesting() }
+        _RenderEventRegistry.resetForTesting()
 
         // The 0.2.0 contract: a tap that mutates
         // `@State` triggers a subtree-scoped re-render.
@@ -159,10 +161,22 @@ struct OnTapGestureSingleTapTests {
         // Fire the synthetic click.
         _RenderEventRegistry.simulate(event: "click", on: tap.identity)
 
-        // Drain the microtask.
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Drain the microtask. The
+        // `Task { @MainActor in drainAndCommit() }`
+        // enqueued by `schedule` is a child task on
+        // the main actor; the test's `await` hops
+        // give it a chance to run. Multiple yields
+        // are needed because the test's current task
+        // may be on the same actor as the commit
+        // task, in which case a single yield is not
+        // enough to land on the commit's slot.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: a commit fired AND the state is now 1.
         #expect(recorder.commits.count - baselineCommits == 1)
@@ -178,10 +192,11 @@ struct OnTapGestureNoEventTests {
     @Test("a view with .onTapGesture that never receives a click does not invoke the action and does not schedule a re-render")
     func noClickMeansNoActionAndNoCommit() async {
         let recorder = OnTapCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
         _RenderEventRegistry.resetForTesting()
-        defer { _RenderEventRegistry.resetForTesting() }
+        _RenderEventRegistry.resetForTesting()
 
         // The 0.2.0 contract: a view that has
         // `.onTapGesture` installed but never receives a
@@ -207,9 +222,15 @@ struct OnTapGestureNoEventTests {
         // scheduled by the install (the install is
         // supposed to be inert — it does not enqueue a
         // commit).
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Robust drain: yields + main-actor hop, repeated to land on the
+        // scheduler's `Task { @MainActor in drainAndCommit() }` slot.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: the action was never invoked AND zero
         // commits were scheduled.

@@ -136,10 +136,11 @@ struct ButtonTapFiresActionTests {
     @Test("a synthetic click on a Button invokes the action exactly once")
     func syntheticClickInvokesActionOnce() async {
         let recorder = ButtonCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
         _RenderEventRegistry.resetForTesting()
-        defer { _RenderEventRegistry.resetForTesting() }
+        _RenderEventRegistry.resetForTesting()
 
         // A non-isolated counter the action increments.
         // The test asserts the action ran (count went
@@ -187,10 +188,11 @@ struct ButtonTapFiresActionTests {
     @Test("a tap that mutates @State triggers a subtree-scoped re-render (re-render pairing)")
     func tapOnButtonWithStateMutationTriggersReRender() async {
         let recorder = ButtonCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
         _RenderEventRegistry.resetForTesting()
-        defer { _RenderEventRegistry.resetForTesting() }
+        _RenderEventRegistry.resetForTesting()
 
         // The chain the test exercises (per spec §4):
         //   Button.action() runs
@@ -231,9 +233,15 @@ struct ButtonTapFiresActionTests {
         // implementation enqueues a `Task { @MainActor
         // in ... }`; the stub's no-op schedule does not
         // — so `commits` stays at the baseline.
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Robust drain: yields + main-actor hop, repeated to land on the
+        // scheduler's `Task { @MainActor in drainAndCommit() }` slot.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: a commit fired (one more than the
         // baseline) AND the state is now 1.

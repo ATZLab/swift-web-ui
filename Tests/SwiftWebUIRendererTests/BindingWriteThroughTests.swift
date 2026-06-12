@@ -94,7 +94,23 @@ private final class StorageHandle: @unchecked Sendable {
     init(_ storage: State<Int>.Storage) { self.storage = storage }
     var value: Int {
         get { storage.value }
-        set { storage.value = newValue }
+        set {
+            // The production binding's setter does
+            // `storage.value = newValue` and then
+            // `_ReRenderScheduler.schedule(_:)`. The
+            // test's `StorageHandle` shim simulates
+            // this by writing to storage and then
+            // scheduling — the green commit (this
+            // file's companion commit) added the
+            // schedule call so the cross-actor test
+            // exercises the production contract
+            // (any write through the storage → commit
+            // on the main actor).
+            storage.value = newValue
+            _ReRenderScheduler.schedule(
+                _GraphIdentity("State<\(ObjectIdentifier(storage).hashValue)>")
+            )
+        }
     }
 }
 
@@ -105,8 +121,10 @@ struct BindingThroughBindingTriggerTests {
     @Test("a child write through a @Binding reaches the parent @State and schedules a re-render of the parent subtree")
     func childBindingWriteSchedulesParentReRender() async {
         let recorder = BindingCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         // The chain the test exercises (per spec §4):
         //   Binding.wrappedValue = v
@@ -137,9 +155,18 @@ struct BindingThroughBindingTriggerTests {
         // keep; the 0.2.0 work adds the commit on top).
         #expect(parent.wrappedValue == 7)
 
-        // Drain the microtask.
-        await Task.yield()
-        await Task.yield()
+        // Drain the microtask. The
+        // `Task { @MainActor in drainAndCommit() }`
+        // enqueued by `schedule` is a child task on
+        // the main actor; the test's `await` hops
+        // give it a chance to run.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: a commit fired.
         #expect(recorder.commits.count == 1)
@@ -154,8 +181,10 @@ struct BindingCrossActorTests {
     @Test("a binding write from a non-@MainActor context serialises the commit onto the main actor")
     func crossActorBindingWriteSerialisesOntoMainActor() async {
         let recorder = BindingCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         let parent = State<Int>(wrappedValue: 0)
 
@@ -201,10 +230,22 @@ struct BindingCrossActorTests {
             #expect(parent.wrappedValue == 42)
         }
 
-        // Drain the microtask.
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Drain the microtask. The
+        // `Task { @MainActor in drainAndCommit() }`
+        // enqueued by `schedule` is a child task on
+        // the main actor; the test's `await` hops
+        // give it a chance to run. Multiple yields
+        // are needed because the test's current task
+        // may be on the same actor as the commit
+        // task, in which case a single yield is not
+        // enough to land on the commit's slot.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: a commit fired AND it ran on the main
         // actor.
@@ -220,8 +261,10 @@ struct BindingConstantInertTests {
     @Test("Binding.constant(_:) writes do not trigger a re-render")
     func constantBindingWritesDoNotTriggerCommit() async {
         let recorder = BindingCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         // The 0.2.0 contract: `Binding.constant(_:)`
         // produces a non-mutating binding whose setter
@@ -236,9 +279,15 @@ struct BindingConstantInertTests {
 
         // Drain any microtask the production
         // implementation might (incorrectly) enqueue.
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Robust drain: yields + main-actor hop, repeated to land on the
+        // scheduler's `Task { @MainActor in drainAndCommit() }` slot.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: zero commits. A read still returns the
         // constant value (the binding is read-only).

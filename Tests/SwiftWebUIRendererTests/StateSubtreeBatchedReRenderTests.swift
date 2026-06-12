@@ -106,8 +106,10 @@ struct StateSubtreeScopeReRenderTests {
         // scheduler reports the subtree set; the test
         // asserts the sibling is not in the set.
         let recorder = CommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         // The sibling's identity is what we expect the
         // scheduler to *not* see in the commit's subtree
@@ -125,9 +127,16 @@ struct StateSubtreeScopeReRenderTests {
         _ReRenderScheduler.schedule(owner)
 
         // The microtask is a `Task { @MainActor in ... }`.
-        // Yield long enough for it to run.
-        await Task.yield()
-        await Task.yield()
+        // Yield long enough for it to run; the
+        // `MainActor.run {}` hop forces a real actor
+        // transition.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: the scheduler fired exactly once and
         // the commit's subtree set contains the owner and
@@ -145,8 +154,10 @@ struct StateBatchingTests {
     @Test("three synchronous writes in the same turn produce one commit, not three")
     func threeSynchronousWritesProduceOneCommit() async {
         let recorder = CommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         let owner = _GraphIdentity("Counter")
 
@@ -164,9 +175,15 @@ struct StateBatchingTests {
         // to drain. The stub's no-op schedule does not
         // enqueue anything, so `commits` stays empty —
         // which is also a failure of the contract.
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Robust drain: yields + main-actor hop, repeated to land on the
+        // scheduler's `Task { @MainActor in drainAndCommit() }` slot.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: exactly one commit, not three.
         #expect(recorder.commits.count == 1)
@@ -180,8 +197,10 @@ struct StateMicrotaskTimingTests {
     @Test("the commit fires after the synchronous turn returns, on the Swift concurrency runtime")
     func commitFiresAfterSynchronousTurn() async {
         let recorder = CommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         let owner = _GraphIdentity("Counter")
         let clock = ContinuousClock()
@@ -192,9 +211,19 @@ struct StateMicrotaskTimingTests {
         // Drain the microtask. After the yields return, the
         // production commit (running on the main actor in a
         // `Task { @MainActor in ... }` body) has had a
-        // chance to record its commit instant.
-        await Task.yield()
-        await Task.yield()
+        // chance to record its commit instant. The
+        // `MainActor.run {}` hop forces a real actor
+        // transition (the test's current task may be on
+        // the main actor too, in which case plain
+        // `Task.yield()` is not enough to land on the
+        // commit's slot).
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: the commit instant is later than the
         // setter's return — i.e. the commit ran on a
@@ -221,8 +250,10 @@ struct StateNoMutationNoRenderTests {
     @Test("reading @State.wrappedValue does not schedule a commit")
     func readingWrappedValueDoesNotScheduleCommit() async {
         let recorder = CommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         // The 0.2.0 contract: only writes schedule
         // commits. A read is invisible to the scheduler.
@@ -257,8 +288,10 @@ struct StateCrossActorSetterTests {
     @Test("a write from a non-@MainActor context serialises the commit onto the main actor")
     func crossActorSetterSerialisesOntoMainActor() async {
         let recorder = CommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
+        _RenderEventRegistry.resetForTesting()
 
         let owner = _GraphIdentity("Counter")
 
@@ -276,10 +309,22 @@ struct StateCrossActorSetterTests {
             _ReRenderScheduler.schedule(owner)
         }.value
 
-        // Drain the microtask.
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Drain the microtask. The
+        // `Task { @MainActor in drainAndCommit() }`
+        // enqueued by `schedule` is a child task on
+        // the main actor; the test's `await` hops
+        // give it a chance to run. Multiple yields
+        // are needed because the test's current task
+        // may be on the same actor as the commit
+        // task, in which case a single yield is not
+        // enough to land on the commit's slot.
+        // Wait for the in-flight commit to complete.
+        // The schedule call enqueued a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: a commit fired AND it ran on the main
         // actor (the `MainActor.assertIsolated()` inside

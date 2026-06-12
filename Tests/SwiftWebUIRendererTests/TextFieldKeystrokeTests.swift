@@ -91,10 +91,11 @@ struct TextFieldKeystrokeTests {
     @Test("a synthetic input event on a TextField writes the value through the binding")
     func syntheticInputEventWritesValueThroughBinding() async {
         let recorder = TextFieldCommitRecorder()
+        await _ReRenderScheduler.flushForTesting()
+        _ReRenderScheduler.resetForTesting()
         _ReRenderScheduler.observer = recorder
-        defer { _ReRenderScheduler.observer = nil }
         _RenderEventRegistry.resetForTesting()
-        defer { _RenderEventRegistry.resetForTesting() }
+        _RenderEventRegistry.resetForTesting()
 
         // The 0.2.0 contract: a synthetic `input` event
         // with a new `value` is delivered to the listener,
@@ -142,18 +143,25 @@ struct TextFieldKeystrokeTests {
         #expect(binding.wrappedValue == "")
 
         // Drain any microtask that may have been
-        // scheduled by the binding's setter.
+        // scheduled by the binding's setter. The
+        // `MainActor.run {}` hop forces a real actor
+        // transition.
         let baselineCommits = recorder.commits.count
-        await Task.yield()
-        await Task.yield()
+        for _ in 0..<8 {
+            await Task.yield()
+            await MainActor.run {}
+        }
 
         // Fire the synthetic input event.
         _RenderEventRegistry.simulate(event: "input", on: field.identity)
 
-        // Drain the microtask.
-        await Task.yield()
-        await Task.yield()
-        await Task.yield()
+        // Wait for the in-flight commit to complete.
+        // The simulate call's handler schedules a
+        // `Task { @MainActor in drainAndCommit() }`;
+        // `flushForTesting()` awaits the task's
+        // completion so the assertion sees the
+        // post-commit state.
+        await _ReRenderScheduler.flushForTesting()
 
         // Assert: the binding's value is now "Hello" AND
         // a commit fired on the main actor.
