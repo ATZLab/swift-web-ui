@@ -1,0 +1,142 @@
+# .github/workflows/release.yml
+#
+# SwiftWebUI release pipeline. Triggered by pushing a tag that
+# matches `v*` (e.g. `v0.1.0`, `v0.2.0`). The workflow:
+#   1. Builds the wasm32 binary via `swift build -c release`.
+#   2. Creates a **draft** GitHub Release for the tag, with the
+#      release notes auto-generated from PRs / commits since the
+#      previous tag, and the wasm binary attached as a release
+#      asset.
+#   3. Leaves the release as a **draft** so the owner reviews and
+#      clicks "Publish" on github.com before the public sees it.
+#
+# This is the workflow declared in `.harness/docs/release.md`
+# §"CI / Pages workflows" (body authored by `swiftwebui-steward`,
+# with the build-step details left simple so the `swiftwebui-tooling`
+# rein can later swap in their preferred caching / SDK strategy).
+#
+# Stop condition (per release.md §"Release checklist" step 5): the
+# workflow is wired to tag push, the build step produces a wasm
+# binary, and `gh release create` produces a draft with the binary
+# attached. Owner publish happens on github.com.
+#
+# Why `macos-26` (Xcode 26.4.1 / Swift 6.3.1) instead of
+# `macos-latest`: matches the runner the `ci.yml` matrix pins, so
+# the Swift toolchain and the SwiftPM-derived build flags stay in
+# lock-step. See `ci.yml` for the full rationale.
+#
+# Why install the wasm SDK in the workflow rather than rely on a
+# preinstalled toolchain: as of 0.1.0, neither `macos-26` nor
+# `ubuntu-latest` ships the `wasm32-unknown-wasi` SDK out of the
+# box. We install the same artifactbundle `scripts/serve.sh`
+# documents for the local-dev path, so what runs here matches what
+# a contributor runs locally.
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# A new tag push cancels any in-flight release build for the same
+# tag (e.g. when the owner re-tags after a missed asset).
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # required for `gh release create`
+
+jobs:
+  build-and-draft:
+    name: build wasm32 + draft GitHub Release
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+      WASM_SDK_URL: https://github.com/swiftwasm/swift/releases/download/swift-wasm-6.0.3-RELEASE/swift-wasm-6.0.3-RELEASE-macos.artifactbundle.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Select Xcode 26.4.1
+        # Mirror the ci.yml toolchain selection so the Swift version
+        # the release workflow sees matches the version ci tests
+        # against.
+        run: |
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          xcodebuild -version
+          swift --version
+
+      - name: Print tag metadata
+        # `GITHUB_REF_NAME` on a tag push is the tag itself
+        # (e.g. `v0.1.0`). Log it and the annotated tag message
+        # so the workflow run log doubles as a release audit
+        # trail.
+        run: |
+          echo "tag: $GITHUB_REF_NAME"
+          git show "$GITHUB_REF_NAME" --no-patch --format='%H%n%an <%ae>%n%s%n%n%b' || true
+
+      - name: Install wasm32 SDK
+        # The canonical install command from `scripts/serve.sh`
+        # and `scripts/verify-wasm32.sh`. Pinned to the
+        # `swift-wasm-6.0.3-RELEASE` artifactbundle, matching the
+        # version those scripts document.
+        run: |
+          set -euxo pipefail
+          curl -fsSL "$WASM_SDK_URL" -o /tmp/wasm-sdk.tar.gz
+          swift sdk install /tmp/wasm-sdk.tar.gz
+          rm -f /tmp/wasm-sdk.tar.gz
+          swift sdk list
+
+      - name: Build wasm32 (release configuration) and publish binary path
+        # -c release is what produces a binary small enough to
+        # ship as a release asset. The output binary's path is
+        # SPM-version-specific, so we resolve it from the build
+        # settings rather than hard-coding. We export the path
+        # via $GITHUB_ENV so the next step can attach it to the
+        # draft release.
+        run: |
+          set -euxo pipefail
+          swift build -c release --triple wasm32-unknown-wasi
+          build_dir="$(swift build -c release --triple wasm32-unknown-wasi --show-bin-path)"
+          echo "wasm build dir: $build_dir"
+          # Sanity check: at least one `.wasm` artifact exists.
+          shopt -s nullglob
+          wasm_files=( "$build_dir"/*.wasm )
+          if (( ${#wasm_files[@]} == 0 )); then
+            echo "::error::no .wasm artifact produced under $build_dir"
+            exit 1
+          fi
+          echo "wasm artifacts:"
+          printf '  %s\n' "${wasm_files[@]}"
+          # Pick the first .wasm; the SwiftWebUI example target
+          # produces a single executable.
+          wasm_path="${wasm_files[0]}"
+          echo "wasm_path=$wasm_path" >> "$GITHUB_ENV"
+
+      - name: Create draft GitHub Release
+        # `gh release create` is the first-party, no-third-party
+        # path. `--draft` keeps the release private until the
+        # owner reviews and clicks Publish. `--generate-notes`
+        # produces the changelog section from PRs/commits since
+        # the previous tag, which `CHANGELOG.md` then cross-
+        # references.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --generate-notes \
+            --title "$GITHUB_REF_NAME" \
+            "$wasm_path#wasm"
+
+      - name: Summarize
+        run: |
+          echo "Draft release created for $GITHUB_REF_NAME."
+          echo "Open the Releases tab and click Publish after review:"
+          echo "  https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
