@@ -1164,10 +1164,10 @@ renderer is free to evolve without breaking source.
 
 | Symbol | Public contract it implements |
 |---|---|
-| `_RendererReRenderHook` | The 0.1.0 root-tree re-render trigger, retained for the 0.1.0 → 0.2.0 transition. **Deprecated in 0.2.0** — `@State` and `@Binding` setters should call `_ReRenderScheduler.schedule(_:)` instead. The 0.2.0 deletion of this hook is 0.3.0 work. |
+| `_RendererReRenderHook` | The 0.1.0 root-tree re-render trigger, retained for the 0.1.0 → 0.2.0 transition. **Deprecated in 0.2.0** — every entry point is `@available(*, deprecated, message: "Use _ReRenderScheduler.schedule(_:) instead. This hook is removed in 0.3.0.")`. `@State` and `@Binding` setters call both the deprecated hook and `_ReRenderScheduler.schedule(_:)` for the duration of 0.2.0; the hook is removed in 0.3.0. |
 | `_ReRenderScheduler` | The re-render scheduler. **`(v0.2.0)`** The scheduler enqueues a `Task { @MainActor in ... }` on the Swift concurrency runtime; the body of the task performs the re-render of the scheduled subtree. `@State` and `@Binding` setters and `EnvironmentValues` writers all go through this. The `@MainActor` isolation is the contract — the body always runs on the main actor, even if the setter call came from another actor. |
 | `_RenderEventRegistry` | The DOM event listener registry. `Button`, `TextField`, and `.onTapGesture` install their listeners here; the registry owns the `JSClosure` retain policy. |
-| `_GraphIdentity` | The per-view identity tag the renderer uses to decide which subtree a re-render applies to. Stable across the 0.2.0 microtask-batched commits. |
+| `_GraphIdentity` | The per-view identity tag the renderer uses to decide which subtree a re-render applies to. Stable across the 0.2.0 microtask-batched commits. **Equality contract (0.2.0):** two identities with the same `label: String` are equal (`Hashable` is auto-synthesised from `label`). The 0.2.0 simple contract uses structural (label-keyed) identity; the 0.3.0 work that introduces identity-stable diffing will tighten this to a per-render handle (see `_GraphIdentity.swift` file header for the rationale and the owner decision). |
 
 `@_spi(Experimental)` symbols may ship tests in the same
 commit as their implementation (the TDD red→green cycle is
@@ -1546,10 +1546,19 @@ v0.2.0 phase 2 (this commit) is:
   shape (does the renderer want a `count: 1` only contract
   for 0.2.0, or does it want `count: 2` with a timer?).
 - **(4) `_RendererReRenderHook` deprecation vs. deletion.**
-  **Open.** The 0.2.0 spec marks the hook deprecated
-  (deletion 0.3.0). The owner can promote to deletion in
-  0.2.0 if the dom-renderer is ready to remove the global
-  static on the same commit that adds `_ReRenderScheduler`.
+  **Resolved (dom-renderer 2026-06-12).** The 0.2.0 production
+  wiring ships the hook with
+  `@available(*, deprecated, message: "Use
+  _ReRenderScheduler.schedule(_:) instead. The 0.1.0 root
+  re-render contract is replaced by the 0.2.0
+  subtree-scoped, microtask-batched re-render. This hook is
+  removed in 0.3.0.")` on every entry point. The
+  `State.wrappedValue` setter calls both the deprecated
+  hook and the new scheduler for the duration of 0.2.0; the
+  hook is removed in 0.3.0. The 0.1.0 root-tree re-render
+  (the snapshot test target's contract) is preserved
+  alongside the 0.2.0 microtask-batched path until the
+  0.3.0 deletion.
 - **(5) `ButtonStyle` SPI vs. public.** **Open.** The 0.2.0
   spec keeps the protocol as `@_spi(Experimental)`. The
   owner can promote to public if the dom-renderer ships a
