@@ -321,6 +321,95 @@ VStack {
 }
 ```
 
+### `Button` **`(v0.2.0)`**
+
+```swift
+public struct Button<Label: View>: View {
+    public init(_ titleKey: LocalizedStringKey, action: @escaping () -> Void)
+    public init<S: StringProtocol>(_ title: S, action: @escaping () -> Void)
+    public init(role: ButtonRole?, action: @escaping () -> Void, @ViewBuilder label: () -> Label)
+    public init(action: @escaping () -> Void, @ViewBuilder label: () -> Label)
+    public var body: some View { /* never */ }
+}
+
+public enum ButtonRole: Hashable, Sendable {
+    case destructive
+    case cancel
+}
+```
+
+A tappable control. The `(_:action:)` overloads take a string
+label and an action; the `(action:label:)` overloads take an
+action and a `@ViewBuilder` label. The `role:` parameter
+mirrors SwiftUI's role-aware button — `.destructive` and
+`.cancel` affect only the accessible name and traits in
+0.2.0; visual styling of the role is 0.3.0+.
+
+Tapping the button calls `action()` once per tap. The action
+runs on the same microtask that scheduled the tap; mutating
+`@State` inside the action triggers the 0.2.0 subtree-scoped
+re-render of the view that owns the state. The renderer's
+`_RenderEventRegistry` (SPI) installs the DOM `click` listener
+on mount and removes it on teardown; `JSClosure` retention is
+the 0.2.0 `JSClosure` lifetime contract.
+
+**Mirrors SwiftUI:** identical signature shape to SwiftUI's
+`Button`. SwiftUI's `Button` also ships a
+`ButtonStyleConfiguration` for styled buttons; the equivalent
+in SwiftWebUI is the `ButtonStyle` protocol (SPI in 0.2.0, see
+§8). The `LocalizedStringKey` overload is shipped for parity
+but the runtime behaviour of localisation is 0.3.0+.
+
+**Example:**
+
+```swift
+Button("Save") { save() }
+Button(role: .destructive) { delete() } label: { Text("Delete") }
+```
+
+### `TextField` **`(v0.2.0)`**
+
+```swift
+public struct TextField: View {
+    public init(_ titleKey: LocalizedStringKey, text: Binding<String>)
+    public init<S: StringProtocol>(_ title: S, text: Binding<String>)
+    public var body: some View { /* never */ }
+}
+```
+
+A single-line text input. The `(_:text:)` overloads take a
+placeholder string and a `Binding<String>` whose `wrappedValue`
+is the field's text. Renders to `<input type="text">`; the
+placeholder is set as the HTML `placeholder` attribute. Typing
+in the field writes the new value through the binding; the
+binding's setter is the same `@Binding` setter from §4, so
+the 0.2.0 subtree-scoped re-render of the view that declared
+the binding fires on every keystroke.
+
+In 0.2.0 the field is **single-line**; pressing `Enter` does
+not commit, the value is written on every `input` event. There
+is no `onSubmit(of:_:)`, no `formatter`, no
+`TextFieldStyle`. Multi-line input (`TextEditor`) is **not**
+a 0.2.0 goal — see §9.
+
+**Mirrors SwiftUI:** subset of SwiftUI's `TextField` overloads.
+SwiftUI's `TextField` also accepts `axis: Axis = .horizontal`
+(multi-line, deferred) and an `onEditingChanged` /
+`onCommit` callback (deferred). The 0.2.0 SwiftWebUI surface
+is the simplest single-line form that exercises the
+event-delegation path.
+
+**Example:**
+
+```swift
+struct NameForm: View {
+    @State var name = ""
+    var body: some View {
+        TextField("Your name", text: $name)
+    }
+}
+```
+
 ### `EmptyView`
 
 ```swift
@@ -522,15 +611,19 @@ public struct State<Value>: DynamicProperty {
 ```
 
 A value owned by the view. The initial value is captured at
-first render. In 0.1.0 mutating `wrappedValue` updates the
-backing storage and **triggers a single, full re-render of the
-root view tree** — the 0.2.0 work will turn this into a
-subtree-scoped, batched re-render.
+first render. **`(v0.2.0)`** Mutating `wrappedValue` updates
+the backing storage and schedules a re-render of the
+**subtree rooted at the view that owns the `State`**. Multiple
+writes inside the same synchronous turn collapse into a single
+microtask-driven commit — one re-render per microtask, not per
+setter. The 0.1.0 contract ("one full re-render of the root
+view tree per setter") is replaced.
 
 **Mirrors SwiftUI:** identical shape to SwiftUI's `@State`.
-The "subtree-scoped, batched" re-render behaviour is a
-SwiftWebUI 0.2.0 concern; SwiftUI gets that for free because
-it owns the runtime.
+The "subtree-scoped, batched" re-render is the behaviour
+SwiftUI provides for free because it owns the runtime; in
+SwiftWebUI it is the explicit contract of the
+`_ReRenderScheduler` (SPI) the setter delegates to.
 
 **Example:**
 
@@ -538,7 +631,7 @@ it owns the runtime.
 struct Counter: View {
     @State var count = 0
     var body: some View {
-        Text("count = \(count)")
+        Button("count = \(count)") { count += 1 }
     }
 }
 ```
@@ -590,10 +683,15 @@ public struct Environment<Value>: DynamicProperty {
 ```
 
 Reads a value from the `EnvironmentValues` carried down the
-view tree. In 0.1.0 the lookup is performed at render time;
-mutating the environment at the root of a re-render causes
-children to see the new value on their next access. There is
-no per-environment-key subscription in 0.1.0 — that is 0.2.0.
+view tree. **`(v0.2.0)`** The lookup is performed at render
+time against a per-key subscription: when an ancestor writes
+a value through the `EnvironmentValues` subscript for a key
+that a descendant reads with `@Environment`, the
+`_ReRenderScheduler` schedules a re-render of the descendants
+that observed the key, in the same microtask-batched shape as
+`@State` and `@Binding`. In 0.1.0 the same write reached the
+bag but did not trigger a re-render; that behaviour is
+replaced.
 
 **Mirrors SwiftUI:** identical shape to SwiftUI's
 `@Environment(_:)`.
@@ -882,6 +980,45 @@ teardown is not observable from the Swift side.
 Text("ready").onAppear { print("mounted") }
 ```
 
+### `.onTapGesture(count:perform:)` **`(v0.2.0)`**
+
+```swift
+extension View {
+    public func onTapGesture(count: Int = 1, perform action: @escaping () -> Void) -> some View
+}
+```
+
+Attaches a tap recogniser to the view. `count` is the number
+of consecutive taps required to fire `action`; the 0.2.0
+surface accepts `count: Int = 1` only — `count == 1` is the
+common case. A recogniser with `count > 1` defers firing
+until the multi-tap timer elapses, so a `count: 2` recogniser
+suppresses the `count: 1` recogniser that would otherwise
+fire on the first tap.
+
+The recogniser is implemented in the renderer against a DOM
+`click` listener installed by `_RenderEventRegistry` (SPI);
+the closure is wrapped in a `JSClosure` whose lifetime
+follows the view's identity in the graph. Tapping calls
+`action()` once per recognised gesture; mutating `@State`
+inside `action` triggers the 0.2.0 subtree-scoped re-render
+of the view that owns the state. There is no `gesture(_:)`,
+no `SimultaneousGesture`, no `LongPressGesture` in 0.2.0 —
+see §9.
+
+**Mirrors SwiftUI:** identical signature to SwiftUI's
+`.onTapGesture(count:perform:)`. SwiftUI also ships
+`.onLongPressGesture`, `.gesture(_:)`, and the gesture
+combinator DSL; those are 0.3.0+ (a11y / animation work)
+because they depend on a frame-driven diff loop.
+
+**Example:**
+
+```swift
+Text("Tap me")
+    .onTapGesture { count += 1 }
+```
+
 ---
 
 ## 7. Escape hatches
@@ -928,37 +1065,69 @@ struct Switcher: View {
 
 ---
 
-## 8. SPI in 0.1.0
+## 8. SPI in 0.2.0
 
-The following surface is `@_spi(Experimental)` in 0.1.0.
-Treat it as a draft — signatures may change, names may change,
-semantics may change. **Do not** depend on SPI from outside
-the SwiftWebUI source tree. Promoting a symbol to public
-requires an architect PR and a test.
+The following surface is gated in 0.2.0. **`@_spi(Experimental)`**
+symbols are drafts — signatures may change, names may change,
+semantics may change. **`@_spi(SwiftWebUI)`** symbols are
+project-internal — they are not drafts, but they are not part
+of the public surface either. **Do not** depend on either
+flavour from outside the SwiftWebUI source tree. Promoting
+a symbol to public requires an architect PR and a test.
 
-| Symbol | Reason for SPI in 0.1.0 |
+### `@_spi(Experimental)` (public-API-in-waiting)
+
+| Symbol | Reason for SPI in 0.2.0 |
 |---|---|
 | `Layout` protocol | Spec is still being aligned with SwiftUI's 0.5+ `Layout`; ship as SPI first. |
 | `GeometryReader` | Depends on `Layout` and a real flex engine (0.4.0). |
 | `Shape` protocol | Depends on a 2D path engine; `Rectangle` and `Circle` are 0.4.0. |
 | `Path` 2D API | Same as `Shape`. |
-| `ViewModifier` | Modifiers are shipped as View extensions in 0.1.0; the protocol lands when there is a need to bundle modifiers. |
+| `ViewModifier` | Modifiers are shipped as View extensions in 0.2.0; the protocol lands when there is a need to bundle modifiers. |
 | Animation primitives | 0.3.0 work — depends on a frame-driven diff loop. |
 | Accessibility hooks | 0.3.0 work — depends on a stable renderer graph. |
-| `Button`, `TextField` | 0.2.0 work — depend on a stable event-delegation path. |
+| `ButtonStyle` | Protocol shape is locked for 0.2.0; concrete styles (`.bordered`, `.borderless`, …) are 0.3.0 work. The 0.2.0 renderer uses a `PlainButtonStyle` default. |
+
+`Button` and `TextField` **moved from `@_spi(Experimental)` to
+`public`** in 0.2.0 — see the v0.2.0 changelog at the top of
+this document.
+
+### `@_spi(SwiftWebUI)` (project-internal, not for promotion)
+
+The following types are part of the renderer's internal seam
+between `Sources/SwiftWebUI/` and `Sources/SwiftWebUIRenderer/`.
+They are not drafts and are not intended to become public.
+Their public contract is documented in the per-symbol
+Discussion above; the types themselves stay SPI so the
+renderer is free to evolve without breaking source.
+
+| Symbol | Public contract it implements |
+|---|---|
+| `_RendererReRenderHook` | The 0.1.0 root-tree re-render trigger, retained for the 0.1.0 → 0.2.0 transition. **Deprecated in 0.2.0** — `@State` and `@Binding` setters should call `_ReRenderScheduler.schedule(_:)` instead. The 0.2.0 deletion of this hook is 0.3.0 work. |
+| `_ReRenderScheduler` | The microtask-batched re-render scheduler. `@State` and `@Binding` setters and `EnvironmentValues` writers all go through this. |
+| `_RenderEventRegistry` | The DOM event listener registry. `Button`, `TextField`, and `.onTapGesture` install their listeners here; the registry owns the `JSClosure` retain policy. |
+| `_GraphIdentity` | The per-view identity tag the renderer uses to decide which subtree a re-render applies to. Stable across the 0.2.0 microtask-batched commits. |
 
 `@_spi(Experimental)` symbols may ship tests in the same
 commit as their implementation (the TDD red→green cycle is
 encouraged but not enforced for SPI; see `.harness/docs/tdd.md`
 §"What is not a TDD violation"). They MUST ship with DocC
 comments and a test before they can be promoted to public.
+`@_spi(SwiftWebUI)` symbols MUST ship with at least one test
+(the renderer test target uses them directly) and SHOULD
+ship with a `///` comment, but the public-API-style DocC
+treatment is not required.
 
 ---
 
-## 9. Disallowed public surface (locked)
+## 9. Disallowed public surface (locked, 0.2.0)
 
-The following is **not** part of the 0.1.0 contract and MUST
-NOT be added to the public API without an architect PR:
+The following is **not** part of the 0.2.0 contract and MUST
+NOT be added to the public API without an architect PR.
+The general bans from v0.1.0 still apply; this section adds
+the 0.2.0-specific carve-outs.
+
+### General bans (unchanged from 0.1.0)
 
 - Anything that exposes a `JavaScriptKit` type (`JSClosure`,
   `JSFunction`, `JSValue`, `JSObject`, …) in the public
@@ -975,15 +1144,84 @@ NOT be added to the public API without an architect PR:
   allowed interop; see `AGENTS.md` §5 and
   `.harness/docs/js-bridge.md`.
 
+### 0.2.0-specific carve-outs
+
+- **`TextEditor` (multi-line text input).** SwiftUI's
+  `TextEditor` accepts an `axis: Axis` parameter; in 0.2.0
+  `TextField` is single-line only. Adding a public
+  `TextEditor` shape requires an architect PR that names
+  the renderer strategy (CSS `contenteditable` vs. a hidden
+  `<textarea>`) and the binding contract. The shape is
+  deliberately **not** aliased to `TextField(axis: .vertical)`
+  in 0.2.0 because the `input` event vs. the
+  `beforeinput` / `input` event pair on `contenteditable` is
+  a real difference that users will trip on.
+- **`ButtonStyle` concrete styles.** The `ButtonStyle`
+  protocol ships in 0.2.0 as `@_spi(Experimental)`; concrete
+  styles (`.bordered`, `.borderless`, `.borderedProminent`,
+  `.plain`) are 0.3.0. A 0.2.0 PR that adds a public
+  concrete style is rejected.
+- **Multi-tap, long-press, and gesture combinators.** The
+  0.2.0 surface ships `.onTapGesture(count:perform:)` with
+  `count: Int = 1` only. `.onLongPressGesture`,
+  `LongPressGesture`, `DragGesture`, `MagnificationGesture`,
+  `RotationGesture`, and the `gesture(_:)` / `simultaneousGesture(_:)`
+  / `highPriorityGesture(_:)` modifier set are 0.3.0+ (they
+  depend on the frame-driven diff loop, which is the
+  animation work).
+- **Text-field formatters and styles.** SwiftUI's
+  `TextField` accepts a `formatter:` parameter, an
+  `onEditingChanged:` callback, an `onCommit:` callback, and
+  a `TextFieldStyle` (`PlainTextFieldStyle`,
+  `RoundedBorderTextFieldStyle`, `SquareBorderTextFieldStyle`,
+  `DefaultTextFieldStyle`). None of these are in 0.2.0. The
+  0.2.0 surface is the simplest `(_:text:)` form that
+  exercises the event-delegation path.
+- **`SecureField`.** SwiftUI's `SecureField(_:text:)` is
+  deliberately not in 0.2.0. The 0.2.0 `TextField` does
+  **not** support `type="password"`; a public `SecureField`
+  is a separate symbol and ships when the renderer has a
+  tested path for `<input type="password">` and the
+  `JSClosure` lifetime of a value-suppressing input.
+- **`Toggle`, `Slider`, `Stepper`, `Picker`.** All 0.5.0
+  forms. The 0.2.0 surface covers the
+  gesture / event-delegation path with `Button` and
+  `.onTapGesture`; the bound-control path lands in 0.5.0
+  with `List` and `Form`.
+- **`.buttonStyle(_:)` modifier.** The protocol is SPI; the
+  modifier that consumes it is therefore also not in 0.2.0.
+  Promoting the protocol to public lands with the first
+  public concrete style in 0.3.0.
+- **`.textFieldStyle(_:)` modifier.** Same reason — the
+  protocol is not in 0.2.0 at all.
+
+### 0.2.0 carry-over from 0.1.0
+
+These were disallowed in 0.1.0 and remain disallowed in 0.2.0
+because the 0.2.0 work did not add the renderer machinery to
+support them:
+
+- **`Image` system-image names** (e.g. `Image(systemName: "x")`).
+  SwiftUI's `Image(systemName:)` resolves an SF Symbol; the
+  0.2.0 `Image(_:)` is URL-string only (0.1.0 contract
+  unchanged). SF Symbols require a web font mapping, which
+  is 0.4.0+ (shapes work).
+- **`Font.custom(_:size:)`** and `Font.Design`. The 0.1.0
+  `Font` enum is unchanged in 0.2.0.
+- **The full SwiftUI `Color` palette** (`.indigo`, `.mint`,
+  `.teal`, …). The 0.1.0 set of eight named hues plus
+  `.primary` and `.secondary` is the 0.2.0 set.
+
 A PR that adds a banned symbol is rejected at review by the
 architect; the steward reverts it on `main` if it lands.
 
 ---
 
-## 10. Acceptance for 0.1.0 (per symbol)
+## 10. Acceptance for 0.2.0 (per symbol)
 
 Each public symbol in this document ships only when all five
-are true:
+are true. The 0.2.0 additions to this contract are noted
+inline.
 
 1. The symbol exists in `Sources/SwiftWebUI/` (or
    `Sources/SwiftWebUIRenderer/` for renderer-internal SPI,
@@ -1004,6 +1242,152 @@ are true:
 The SwiftUI name parity check (rule 1 in `naming.md`) is
 performed by the docs agent as a final pre-merge sweep.
 
+### 0.2.0 per-symbol test plan (additive)
+
+The 0.2.0-specific symbols each require the following
+acceptance, on top of the five general items above.
+
+#### `@State` (re-render semantics change)
+
+- **Subtree scope test** (Tests/SwiftWebUITests/): a
+  `Parent` view that hosts a `State<Int>` and a `Sibling`
+  view that does **not** observe that state; after a state
+  write, only the subtree rooted at the `State` owner
+  re-renders, not the `Sibling`. The test must observe the
+  re-render count, not the resulting DOM (DOM equality is
+  not a sufficient signal).
+- **Batching test** (Tests/SwiftWebUITests/): three
+  synchronous writes to the same `State` in the same
+  synchronous turn produce **one** microtask-driven commit,
+  not three. The test installs a `ReRenderObserver` (SPI) on
+  the scheduler and asserts the commit count.
+- **Snapshot test** (Tests/SwiftWebUISnapshots/): a
+  `Counter` view at `count = 0` and at `count = 3` produces
+  the expected two snapshots; the diff is a single
+  `textContent` change in the `<div>`.
+- **0.1.0 regression**: the existing `Test/SwiftWebUISnapshots/`
+  baseline for the 0.1.0 root-tree re-render **does not**
+  change in 0.2.0 (subtree scope is a new contract, the
+  root-tree re-render was a 0.1.0 deliverable and is now
+  deprecated; see §8 `_RendererReRenderHook`).
+
+#### `@Binding` (re-render semantics change)
+
+- **Through-binding trigger test**: a child view that holds
+  `@Binding var count: Int` and writes to it; the parent's
+  `@State` storage receives the write, the
+  `_ReRenderScheduler` schedules the parent's subtree, and
+  the parent re-renders. The test uses the same
+  `ReRenderObserver` as the `@State` batching test.
+- **Constant binding is inert**: `Binding.constant(_:)`
+  writes do **not** trigger a re-render (the assertion is
+  negative — the commit count stays at zero).
+
+#### `@Environment` (per-key subscription change)
+
+- **Ancestor-write-then-descendant-read test**: a parent
+  view sets `\.colorScheme` to `.dark` through the
+  `EnvironmentValues` subscript; a child that reads
+  `@Environment(\.colorScheme)` observes the new value on
+  the same microtask-batched commit.
+- **Unrelated-key test**: setting `\.colorScheme` on the
+  ancestor does **not** cause a re-render of a descendant
+  that does not read it (the per-key subscription
+  granularity).
+
+#### `Button`
+
+- **Tap-fires-action test** (Tests/SwiftWebUITests/): a
+  `Button("Save") { counter += 1 }` whose action is
+  invoked once on a synthetic click; the action receives
+  the increment; the `@State` write triggers a subtree
+  re-render.
+- **Snapshot test** (Tests/SwiftWebUISnapshots/): a
+  `Button` renders to `<button>Save</button>` (or the
+  accessibility-correct equivalent); the snapshot file is
+  committed.
+- **`role:` accessibility test**: a `Button(role: .destructive)`
+  exposes `aria-role="button"` plus a `data-swui-role="destructive"`
+  attribute (or the renderer-equivalent marker the a11y
+  sweep can detect). The exact ARIA mapping is the
+  `swiftwebui-dom-renderer` agent's contract; the
+  acceptance is that the role is queryable from the DOM.
+- **Re-render pairing** with `@State` (already covered by
+  the `@State` subtree-scope test); the test suite must
+  include a `Button` that increments a `@State` and asserts
+  the post-tap DOM.
+
+#### `TextField`
+
+- **Keystroke-writes-binding test**: a `TextField("Name",
+  text: $name)` receives a synthetic `input` event with
+  `value = "Hello"`; the binding's `wrappedValue` is
+  `"Hello"` after the event.
+- **Subtree re-render on keystroke**: the binding write
+  triggers a subtree-scoped re-render (the `@Binding`
+  acceptance covers this in the abstract; the
+  `TextField`-specific test asserts the rendered DOM has
+  the new value).
+- **Snapshot test** (Tests/SwiftWebUISnapshots/): a
+  `TextField` with `placeholder = "Name"` and an empty
+  binding renders to `<input type="text" placeholder="Name">`;
+  the snapshot is committed.
+- **Single-line contract**: the DOM element is `<input>`
+  (not `<textarea>`); the test asserts the tag name.
+
+#### `.onTapGesture(count:perform:)`
+
+- **Single-tap test**: a `Text` with `.onTapGesture { ... }`
+  receives a synthetic `click` event; the action runs once.
+- **Re-render pairing**: the same as `Button` — a tap that
+  mutates `@State` triggers a subtree re-render; the test
+  asserts the post-tap DOM.
+- **No-event test**: a view that has `.onTapGesture`
+  installed but never receives a click does not call the
+  action and does not schedule a re-render. The
+  `JSClosure` registry's retention test (existing in the
+  renderer test target) covers the negative case.
+- **Snapshot test** (Tests/SwiftWebUISnapshots/): a
+  `Text("Tap me").onTapGesture { … }` produces the same
+  DOM as `Text("Tap me")`; the click listener is internal
+  and is not part of the rendered markup.
+
+#### `ButtonStyle` (SPI in 0.2.0)
+
+- **Compile-only acceptance**: the protocol compiles, the
+  `PlainButtonStyle` default renders. No public symbol
+  promise is made; the SPI contract is "a future minor
+  promotes the protocol to public, with concrete styles,
+  and the 0.2.0 protocol shape is part of that
+  compatibility window". A test that asserts the
+  `PlainButtonStyle` default is the renderer-selected
+  style is **not** required in 0.2.0 — promoting the
+  protocol to public is the work of 0.3.0.
+
+#### `_ReRenderScheduler` (SPI)
+
+- **Commit-count test**: synchronous N writes → 1 commit
+  (batching contract).
+- **Microtask timing test**: the commit runs in a
+  microtask, not synchronously. The test uses a
+  `ReRenderObserver` and asserts the commit happens
+  **after** the synchronous turn returns.
+- **Subtree identity test**: a write to a `@State` owned
+  by view `A` schedules a commit whose re-render set is
+  `{A, A.children}` and not `{root, root.subtree}`.
+
+#### `_RenderEventRegistry` (SPI)
+
+- **Install-on-mount / remove-on-teardown test**: a
+  `Button` mounted in the DOM has a `click` listener
+  registered; the listener is removed when the `Button`
+  is torn down (the parent re-renders without it). The
+  test uses a `MutationObserver` in the host page.
+- **`JSClosure` retain-cycle test** (existing from 0.1.0):
+  no regression — the registry's `JSClosure` policy
+  remains the documented lifetime in
+  `.harness/docs/js-bridge.md`.
+
 ---
 
 ## 11. Reference
@@ -1014,12 +1398,25 @@ performed by the docs agent as a final pre-merge sweep.
   `.harness/docs/tdd.md`.
 - DocC contract (`///` + `## Discussion` + `## Example`,
   Apple-voice tone): `.harness/docs/docc.md`.
-- Renderer model choice (graph-based / VDOM in 0.1.0):
-  `AGENTS.md` §6.
+- Renderer model choice (graph-based / VDOM in 0.1.0; the
+  0.2.0 work preserves the model and adds microtask
+  batching): `AGENTS.md` §6.
 - JavaScriptKit interop rules and the `JSClosure` lifetime
-  policy: `.harness/docs/js-bridge.md`.
+  policy: `.harness/docs/js-bridge.md`. **The 0.2.0
+  `JSClosure` lifetime of `Button` / `.onTapGesture` /
+  `TextField` event listeners is governed by
+  `_RenderEventRegistry` (see §8); the bridge's retain-policy
+  contract in `js-bridge.md` is the underlying mechanism.**
 - Release mechanics and 0.x milestone plan: `.harness/docs/release.md`.
-- v0.1.0 stop conditions: `ROADMAP.md` §"v0.1.0".
+- v0.1.0 stop conditions: `ROADMAP.md` §"v0.1.0" (frozen;
+  the 0.1.0 deliverable is on `main` as of the 0.1.0
+  close-out merge).
+- **v0.2.0 stop conditions**: `ROADMAP.md` §"v0.2.0". The
+  five bullets in that section — `@State` toggle re-renders
+  the affected subtree, `Button` tap fires the action,
+  `TextField` typing updates the view, `onTapGesture` fires
+  on tap, no `JSClosure` regression — are what the team is
+  measured against.
 
 ## 12. How to extend the surface (the architect's protocol)
 
