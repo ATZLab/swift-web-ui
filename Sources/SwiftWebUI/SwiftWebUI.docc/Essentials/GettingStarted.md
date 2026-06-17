@@ -1,11 +1,9 @@
 # Getting started
 
 > Status: walkthrough. The 0.1.0 surface is the State and
-> Environment family. The 0.1.0 release is the **proof of
-> shape**, not the proof of feature — the `View` / `Text` /
-> `VStack` catalog lands in 0.2.0. The full spec lives in
-> `.harness/docs/swift-ui-surface.md`; the milestone plan is
-> in `ROADMAP.md`.
+> Environment family; 0.2.0 adds the bridge (JavaScriptKit
+> interop — see <doc:WebInterop>). The full milestone plan
+> is in `ROADMAP.md`.
 
 ## What is SwiftWebUI
 
@@ -22,10 +20,11 @@ SwiftWebUI replaces both with a single, actively-maintained
 dependency: JavaScriptKit. The dependency policy is a locked
 decision in `AGENTS.md` §5.
 
-The 0.1.0 release ships the property wrappers and environment
-bag that a SwiftUI-style view tree is composed from. The leaf
-views, containers, and modifiers that surround them are
-sequenced in 0.2.0 and later; the full plan is in `ROADMAP.md`.
+The 0.1.0 release ships the property wrappers and
+environment bag that a SwiftUI-style view tree is composed
+from. The 0.2.0 release adds the leaf views, containers,
+modifiers, and the `SwiftWebUIBridge` interop surface that
+surround them; the full plan is in `ROADMAP.md`.
 
 ## A first program
 
@@ -89,19 +88,51 @@ that reads the key on the current bag. Concrete keys
 subscript API are in the public API now so adding a key
 later is non-breaking.
 
+## Calling JavaScript
+
+The `SwiftWebUIBridge` module is the project's only
+JavaScriptKit interop layer. JavaScriptKit is the only
+allowed dependency; the Tokamak stack and the Tokamak-era
+bundler are not used. The bridge exposes a `JSClosure`
+retain policy, a Swift ↔ JS value converter, an `await`
+helper for Promise-returning APIs, and typed wrappers for
+the browser globals.
+
+The call shape is the `Bridge` namespace's `consoleLog(_:)`,
+`alert(_:)`, and `fetch` entries. A SwiftUI-style `Button`
+action calls the bridge directly:
+
+```swift
+import SwiftWebUIBridge
+
+// (Illustrative — `Button` is renderer-internal SPI in
+// 0.2.0 and lands as stable public API in 0.3.0.)
+Button("click me") {
+    Bridge.consoleLog("started")
+}
+```
+
+The full reference — closure retain, value conversion,
+`await` / Promise, and the binding DSL — is in
+<doc:WebInterop>.
+
 ## Where to go next
 
-- ``EnvironmentValues`` — the propagated collection of
-  environment values.
-- ``EnvironmentKey`` — the recipe for declaring a new
-  environment key.
-- ``State`` — a per-view mutable value.
-- ``Binding`` — a two-way reference into a `State` slot.
-- ``Environment`` — a read-only view of an
-  ``EnvironmentValues`` key.
-- ``DynamicProperty`` — the protocol the wrappers conform
-  to.
-- `.harness/docs/swift-ui-surface.md` — the per-symbol
-  catalog of the 0.1.0 surface, owned by the architect.
-- `ROADMAP.md` — the 0.2.0 milestone plan and what each
-  release unlocks.
+The 0.2.0 bridge interop surface — closure retain, value
+conversion, async helpers, typed browser-global wrappers
+— is in <doc:WebInterop>. The State and Environment
+family is in <doc:ViewFundamentals>, in depth. The 0.2.0
+modifier catalog is in <doc:Modifiers>.
+
+The propagated collection of environment values is
+`EnvironmentValues`. The recipe for declaring a new
+environment key is `EnvironmentKey`. The per-view mutable
+value is `State`. The two-way reference into a `State`
+slot is `Binding`. The read-only view of an
+`EnvironmentValues` key is `Environment`. The protocol
+the wrappers conform to is `DynamicProperty`.
+
+The per-symbol catalog of the 0.1.0 / 0.2.0 surface,
+owned by the architect, is in
+`.harness/docs/swift-ui-surface.md`. The 0.2.0 milestone
+plan and what each release unlocks is in `ROADMAP.md`.
