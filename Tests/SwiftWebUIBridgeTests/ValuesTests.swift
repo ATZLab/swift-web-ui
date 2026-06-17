@@ -20,7 +20,7 @@
 
 import JavaScriptKit
 import Testing
-@testable import SwiftWebUIBridge
+@_spi(SwiftWebUI) @testable import SwiftWebUIBridge
 
 @Suite("Values primitive round-trips (v0.2.0 phase 2-4)")
 struct ValuesPrimitiveRoundTripTests {
@@ -44,7 +44,15 @@ struct ValuesPrimitiveRoundTripTests {
 
     @Test("int round-trips through JSValue")
     func intRoundTrip() {
-        for original in [0, 1, -1, 42, Int.max, Int.min] {
+        // JavaScriptKit's `Int.jsValue` asserts that
+        // `Int.bitWidth == 32` (the canonical Swift `Int`
+        // on the `wasm32-unknown-wasi` target is 32 bits).
+        // On the 64-bit host (macOS) the assertion fires
+        // for values outside the 32-bit range. The
+        // round-trip exercises values that fit in both
+        // `Int32` and `Double` without precision loss.
+        let originals: [Int] = [0, 1, -1, 42, 1_000_000, -1_000_000]
+        for original in originals {
             let js = Values.toJSValue(original)
             let decoded = Values.int(from: js)
             #expect(decoded == original)

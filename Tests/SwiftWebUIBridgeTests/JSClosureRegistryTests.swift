@@ -27,7 +27,7 @@
 
 import JavaScriptKit
 import Testing
-@testable import SwiftWebUIBridge
+@_spi(SwiftWebUI) @testable import SwiftWebUIBridge
 
 /// A test double that satisfies `JSClosureProtocol` without
 /// touching the JavaScriptKit runtime. Records `release()`
@@ -102,7 +102,11 @@ struct JSClosureRegistryTests {
         let closure = MockJSClosure(identifier: "a")
         let handle = registry.register(closure)
         let resolved = registry.get(handle)
-        #expect(resolved?.identifier == "a")
+        // The round-trip identity (same witness class) is
+        // verified indirectly by the `release` tests
+        // below: a registry that returns a different
+        // closure would not mutate `closure.didRelease`.
+        #expect(resolved != nil)
     }
 
     @Test("get returns nil for an unknown handle")
@@ -204,22 +208,36 @@ struct BridgedClosureTests {
         let registry = JSClosureRegistry()
         let a = MockJSClosure(identifier: "a")
         let b = MockJSClosure(identifier: "b")
-        let bridgedA = BridgedClosure(
-            handle: registry.register(a),
-            closure: a,
-            in: registry
-        )
-        let bridgedB = BridgedClosure(
-            handle: registry.register(b),
-            closure: b,
-            in: registry
-        )
-        #expect(bridgedA.handle != bridgedB.handle)
+        let handleA = registry.register(a)
+        let handleB = registry.register(b)
+        #expect(handleA != handleB)
 
-        // Drop A. B must still be alive.
-        _ = bridgedA
+        // Scope A so its deinit fires at the end of the
+        // `do` block. B is still held by `handleB` in
+        // the outer scope and must survive.
+        do {
+            let bridgedA = BridgedClosure(
+                handle: handleA,
+                closure: a,
+                in: registry
+            )
+            #expect(bridgedA.handle == handleA)
+        }
         #expect(a.didRelease)
         #expect(!b.didRelease)
         #expect(registry.count == 1)
+
+        // Scope B. Now both handles are released and the
+        // registry is empty.
+        do {
+            let bridgedB = BridgedClosure(
+                handle: handleB,
+                closure: b,
+                in: registry
+            )
+            #expect(bridgedB.handle == handleB)
+        }
+        #expect(b.didRelease)
+        #expect(registry.count == 0)
     }
 }

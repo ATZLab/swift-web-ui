@@ -20,7 +20,7 @@
 #if os(WASI)
 import JavaScriptKit
 import Testing
-@testable import SwiftWebUIBridge
+@_spi(SwiftWebUI) @testable import SwiftWebUIBridge
 
 @Suite("window.alert wrapper (wasm32-only, v0.2.0 phase 2-4)")
 struct WindowAlertWrapperTests {
