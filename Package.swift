@@ -155,6 +155,25 @@ let package = Package(
                 "SwiftWebUIRenderer",
                 "SwiftWebUI"
             ]
+        ),
+        // JavaScriptKit interop tests (v0.2.0 phase 2-4).
+        // Host-runnable unit tests (JSClosureRegistry map
+        // semantics + Values primitive round-trip) run on
+        // the macOS / native triple; tests that need a live
+        // JSKit runtime (array/object round-trip, Promise
+        // await, window.alert / console.log wrappers) are
+        // `#if os(WASI)`-gated inside the same suite files
+        // and exercise the wasm32 host in CI. The target
+        // depends on the bridge module directly so the
+        // `@testable import SwiftWebUIBridge` is permitted
+        // under the test target's `@_spi(SwiftWebUI)`
+        // surface. See `.harness/docs/js-bridge.md` and
+        // `.harness/docs/tdd.md` for the split.
+        .testTarget(
+            name: "SwiftWebUIBridgeTests",
+            dependencies: [
+                "SwiftWebUIBridge"
+            ]
         )
     ]
 )
