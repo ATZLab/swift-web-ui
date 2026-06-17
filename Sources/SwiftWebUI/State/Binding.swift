@@ -97,7 +97,34 @@ public struct Binding<Value>: DynamicProperty {
     /// The current value. Reading calls the stored getter.
     public var wrappedValue: Value {
         get { getter() }
-        nonmutating set { setter(newValue) }
+        nonmutating set {
+            // 0.2.0 contract (`.harness/docs/swift-ui-surface.md`
+            // §4 + §8 + §10): a write through a `Binding`
+            // forwards to the parent `State` whose setter
+            // schedules the subtree-scoped re-render. The
+            // chain is:
+            //
+            //   Binding.wrappedValue = v
+            //     → Binding.setter(v)
+            //       → State.wrappedValue = v
+            //         → _ReRenderScheduler.schedule(_:)
+            //           → Task { @MainActor in
+            //               re-render(parent-subtree) }
+            //
+            // The `Binding` itself is a value type holding
+            // two closures; the closures close over the
+            // parent's `State.Storage` and re-target writes
+            // there. The scheduler's batching means N
+            // synchronous binding writes in the same turn
+            // collapse into one commit.
+            //
+            // `Binding.constant(_:)`'s setter is a no-op
+            // (`set: { _ in }`), so it never reaches the
+            // scheduler — the test
+            // `BindingConstantInertTests` asserts the
+            // negative contract.
+            setter(newValue)
+        }
     }
 
     /// A `Binding<Value>` re-targeted at the same getter and

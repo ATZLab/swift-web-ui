@@ -1,45 +1,63 @@
 // Sources/SwiftWebUIRenderer/RendererReRenderHook.swift
 //
-// The renderer's root re-render notification seam.
+// The 0.1.0 root re-render notification seam — **deprecated**
+// in 0.2.0 in favour of `_ReRenderScheduler` (see
+// `Sources/SwiftWebUIRenderer/_ReRenderScheduler.swift`).
 //
-// SwiftWebUI's `@State` property wrapper triggers a "re-render"
-// event when `wrappedValue` is set. The 0.1.0 contract
-// (`.harness/docs/swift-ui-surface.md` §4) is that the trigger
-// fires a *single, full re-render of the root view tree*. The
-// 0.2.0 work will replace this with a subtree-scoped, batched
-// re-render.
+// The 0.1.0 contract (`.harness/docs/swift-ui-surface.md` §4)
+// is that the trigger fires a *single, full re-render of the
+// root view tree*. The 0.2.0 work replaces this with a
+// subtree-scoped, microtask-batched re-render driven by
+// `Task { @MainActor in ... }`; the production wiring is
+// `_ReRenderScheduler.schedule(_:)`.
 //
-// The seam is shaped as a thread-local hook:
-//   * The renderer installs a closure at mount time
-//     (`install(_:)`).
-//   * `@State`'s setter calls `trigger()` on every write.
-//   * `trigger()` invokes the installed closure synchronously,
-//     exactly once per write, on the calling thread. No
-//     batching, no microtask queue, no `requestAnimationFrame` —
-//     those are 0.2.0/0.3.0 concerns (see the locked spec at
-//     `.harness/docs/swift-ui-surface.md` §4 and `AGENTS.md`
-//     §6).
+// ## Deprecation (0.2.0)
 //
-// The seam is `@_spi(SwiftWebUI)` because it is a
-// renderer-internal protocol, not a stable public API. The
-// 0.2.0 surface work will likely fold it into a more general
-// `DynamicProperty.update()` call site and re-gate the
-// remaining internal bits under `@_spi(Experimental)`.
+// The hook's public surface is annotated
+// `@available(*, deprecated, message: "Use
+// _ReRenderScheduler.schedule(_:) instead. The 0.1.0 root
+// re-render contract is replaced by the 0.2.0
+// subtree-scoped, microtask-batched re-render. This hook is
+// removed in 0.3.0.")` on every entry point. The seam stays
+// `@_spi(SwiftWebUI)` because it is renderer-internal, not
+// a stable public API.
+//
+// The 0.1.0 root-tree re-render still runs (the
+// `State.wrappedValue` setter calls both the old hook and
+// the new scheduler for the duration of 0.2.0) — the
+// snapshot test target asserts the hook fires once per
+// write (the 0.1.0 contract) and the renderer test target
+// asserts the scheduler fires one commit per
+// microtask-batched turn (the 0.2.0 contract). The two
+// assertions live side by side until the 0.3.0 deletion.
 //
 // Owner: swiftwebui-dom-renderer. Architect owns `@State`'s
 // public shape; this file is renderer-side SPI that the
 // architect's wrapper calls into.
 
-/// The renderer's root re-render notification seam.
+/// The 0.1.0 root re-render notification seam — **deprecated**
+/// in 0.2.0.
 ///
-/// SwiftWebUI's `@State` setter calls `trigger()` on every
-/// write. The renderer installs a closure at mount time that
-/// walks the view tree, re-evaluates the root body, diffs the
-/// new graph against the previous graph, and applies the
-/// patch. The 0.1.0 implementation invokes the closure
-/// synchronously on the calling thread; the 0.2.0 work
-/// introduces batching and a worker thread.
+/// In 0.1.0 SwiftWebUI's `@State` setter called
+/// `_RendererReRenderHook.trigger()` on every write, and the
+/// renderer installed a closure at mount time that walked the
+/// root view tree synchronously on the calling thread. The
+/// 0.2.0 work replaces this with the subtree-scoped,
+/// microtask-batched `_ReRenderScheduler`
+/// (see `Sources/SwiftWebUIRenderer/_ReRenderScheduler.swift`).
+///
+/// Every entry point on this enum is annotated
+/// `@available(*, deprecated, ...)` so any remaining 0.1.0
+/// call sites (the `@State` setter's secondary trigger, the
+/// snapshot test target's `install` / `uninstall` calls) get
+/// a compiler warning. The 0.2.0 `State.wrappedValue` setter
+/// calls **both** the deprecated hook and the new scheduler
+/// for the duration of the minor — the 0.1.0 snapshot test
+/// still asserts the hook fires once per write, and the 0.2.0
+/// scheduler test asserts the new microtask-batched path
+/// fires. The hook is removed in 0.3.0.
 @_spi(SwiftWebUI)
+@available(*, deprecated, message: "Use _ReRenderScheduler.schedule(_:) instead. The 0.1.0 root re-render contract is replaced by the 0.2.0 subtree-scoped, microtask-batched re-render. This hook is removed in 0.3.0.")
 public enum _RendererReRenderHook {
     /// The currently installed hook, or `nil` if no renderer
     /// is in scope.
@@ -50,6 +68,7 @@ public enum _RendererReRenderHook {
     /// `Synchronization.Mutex` (or equivalent) so the hook
     /// can be installed / uninstalled from any thread.
     @_spi(SwiftWebUI)
+    @available(*, deprecated, message: "Use _ReRenderScheduler.schedule(_:) instead; removed in 0.3.0.")
     public nonisolated(unsafe) static var current: (() -> Void)?
 
     /// Installs `hook` as the current root re-render callback.
@@ -62,6 +81,7 @@ public enum _RendererReRenderHook {
     /// `@discardableResult` so call sites that do not need
     /// the previous hook do not have to bind it to `_`.
     @_spi(SwiftWebUI)
+    @available(*, deprecated, message: "Use _ReRenderScheduler.schedule(_:) instead; removed in 0.3.0.")
     @discardableResult
     public static func install(_ hook: @escaping () -> Void) -> (() -> Void)? {
         let previous = current
@@ -74,6 +94,7 @@ public enum _RendererReRenderHook {
     /// The renderer uses the explicit `install(previous)` form
     /// to chain; the tests use `uninstall()` for symmetry.
     @_spi(SwiftWebUI)
+    @available(*, deprecated, message: "Use _ReRenderScheduler.schedule(_:) instead; removed in 0.3.0.")
     public static func uninstall() {
         current = nil
     }
@@ -86,6 +107,7 @@ public enum _RendererReRenderHook {
     /// behaviour outside a renderer context (e.g. a unit
     /// test that does not install a hook).
     @_spi(SwiftWebUI)
+    @available(*, deprecated, message: "Use _ReRenderScheduler.schedule(_:) instead; removed in 0.3.0.")
     public static func trigger() {
         current?()
     }

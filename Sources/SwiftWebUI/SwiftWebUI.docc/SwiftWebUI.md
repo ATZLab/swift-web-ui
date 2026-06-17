@@ -24,6 +24,10 @@ Environment family: the property wrappers that the future
 SwiftUI-style catalog — leaf views, containers, modifiers — lands
 in 0.2.0 and later; the milestone plan is in `ROADMAP.md`.
 
+The 0.2.0 release adds the `SwiftWebUIBridge` module — the only
+JavaScriptKit interop path, with the `JSClosure` lifetime contract
+and the `Bridge` typed entry points (see <doc:WebInterop>).
+
 ## Topics
 
 ### State and data flow
@@ -38,6 +42,10 @@ in 0.2.0 and later; the milestone plan is in `ROADMAP.md`.
 - ``EnvironmentValues``
 - ``EnvironmentKey``
 
+### Bridge (SPI)
+
+- <doc:WebInterop>
+
 ### Essentials
 
 - <doc:GettingStarted>
@@ -46,3 +54,4 @@ in 0.2.0 and later; the milestone plan is in `ROADMAP.md`.
 
 - <doc:ViewFundamentals>
 - <doc:Modifiers>
+- <doc:WebInterop>

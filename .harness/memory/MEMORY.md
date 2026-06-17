@@ -100,5 +100,55 @@ PR was clean (`c17d854` had the architect's 3 files only)
 until `finish-task.sh` ran `git add -A` and produced
 contaminated `7778686` with 19 files of tooling work on
 top. The owner had to force-push the branch back to
-`c17d854`. The owner-time cost was real; the fix
+`c17d854`. The owner-time cost is real; the fix
 (explicit per-path staging before finish) is mechanical.
+
+### DocC cross-module article in per-target catalog (2026-06-17, docs)
+Type: gotcha
+
+`Sources/<Target>/<Target>.docc/Articles/*.md` (the per-target
+DocC catalog) can only backtick-ref symbols declared in **the
+same target**. `swift-docc-plugin` builds one archive per target
+and the cross-target symbol graph is not resolved at per-target
+build time. Two specific warnings observed when an article in
+the `SwiftWebUI` target references `SwiftWebUIBridge` symbols:
+
+- `## Topics` list items with backtick symbol refs (`` `Symbol` ``
+  or `[`Symbol`](path)`) → `'Symbol' doesn't exist at
+  '/SwiftWebUI/...'` warning per ref (5 warnings for the bridge
+  SPI surface).
+- `## See also` list items that mix a link with prose → `Extraneous
+  content found after a link` warning per item (3 warnings).
+
+**Working pattern (zero warnings, Apple guide tone preserved):**
+
+- `## Topics` → **article** cross-refs only
+  (`- <doc:OtherArticle>`). No symbol backticks across module
+  boundaries. List items must be pure links.
+- `## See also` → **prose paragraph** (not a list).
+- Symbol names mentioned in prose are bare, no backticks, no
+  cross-refs.
+
+**When the cross-module backtick-ref becomes safe:** once a
+symbol is promoted to **stable public API** (not SPI), the
+`docc merge` step or `swift-docc-plugin`'s merged-doc option can
+build a unified catalog where the cross-target symbol graph is
+resolved. Today's `scripts/verify-docc.sh --target` mode does
+not run a merge, so per-target archives are the build unit and
+the constraint above holds.
+
+**Project-root `.docc/` is a dead directory:** `verify-docc.sh`'s
+`--target` invocation only builds per-target archives, so a
+project-root `.docc/Articles/WebInterop.md` is **not** picked up.
+Cross-module articles MUST live inside one target's
+`Sources/<Target>/<Target>.docc/Articles/`. The
+`AGENTS.md` §repo-layout `.docc/` entry is a known deviation
+tracked for the 0.3.0 tooling follow-up (catalog root spec
+alignment, owned by `swiftwebui-tooling`).
+
+**Verified in v0.2.0 phase 2-5:** `scripts/verify-docc.sh` exits
+0 with zero warnings on the per-target archives for
+`SwiftWebUI`, `SwiftWebUIRenderer`, `SwiftWebUIBridge`,
+`SwiftWebUITooling` after applying the working pattern above.
+Refs: commits `1b6265c`, `874d382` on
+`feature/v0.2.0-interactivity`.
