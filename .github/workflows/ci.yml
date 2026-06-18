@@ -78,7 +78,12 @@ jobs:
         uses: chetan/git-restore-mtime-action@v2
 
       - name: Cache derived data
-        uses: actions/cache@v4
+        # actions/cache@v4 is incompatible with the Node.js 24 runtime
+        # GitHub Actions is rolling out (2026-06-16 onward); the cache
+        # step exits 65 before the build starts. v5 ships with Node 24
+        # support and is a drop-in replacement (same `path` / `key` /
+        # `restore-keys` inputs). See AGENTS.md tooling follow-up list.
+        uses: actions/cache@v5
         with:
           path: ${{ env.DERIVED_DATA }}
           key: |
