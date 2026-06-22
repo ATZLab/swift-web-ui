@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Select Xcode 26.4.1
         run: |
@@ -78,7 +78,7 @@ jobs:
         uses: chetan/git-restore-mtime-action@v2
 
       - name: Cache derived data
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.DERIVED_DATA }}
           key: |
